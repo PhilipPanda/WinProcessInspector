@@ -15,6 +15,15 @@
 
 ---
 
+## Features
+- Enumerate running processes
+- View loaded modules
+- Inspect threads and memory
+- Runtime instrumentation support
+- Native Win32 and NT API usage
+
+---
+
 ## How to Build and Launch Runtime Inspector
 
 ### 1. Build the Executable
