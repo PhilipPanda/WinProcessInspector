@@ -19,7 +19,7 @@
 
 ---
 
-## How to Build and Launch RuntimeInspector
+## How to Build and Launch Runtime Inspector
 
 ### 1. Build the Executable
 - Open the project in **Visual Studio**.
