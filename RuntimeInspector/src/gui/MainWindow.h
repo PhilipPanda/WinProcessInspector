@@ -74,6 +74,7 @@ namespace GUI {
 		void RenderInjectionMethod();
 		void RenderStatusBar();
 		void RenderProcessDetails();
+		void RenderProcessPropertiesWindow();
 		void RenderThreadManager();
 		void RenderModuleInspector();
 		void RenderMemoryAnalyzer();

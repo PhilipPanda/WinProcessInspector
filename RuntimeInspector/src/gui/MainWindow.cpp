@@ -178,22 +178,78 @@ bool MainWindow::InitializeImGui() {
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-	ImGui::StyleColorsDark();
-	
+	char windowsPath[MAX_PATH];
+	if (GetWindowsDirectoryA(windowsPath, MAX_PATH) > 0) {
+		char fontPath[MAX_PATH];
+		sprintf_s(fontPath, "%s\\Fonts\\segoeui.ttf", windowsPath);
+		if (GetFileAttributesA(fontPath) != INVALID_FILE_ATTRIBUTES) {
+			io.Fonts->AddFontFromFileTTF(fontPath, 18.0f);
+		}
+		sprintf_s(fontPath, "%s\\Fonts\\segoeuib.ttf", windowsPath);
+		if (GetFileAttributesA(fontPath) != INVALID_FILE_ATTRIBUTES) {
+			io.Fonts->AddFontFromFileTTF(fontPath, 18.0f);
+		}
+	}
+
 	ImGuiStyle& style = ImGui::GetStyle();
-	style.WindowPadding = ImVec2(8, 6);
-	style.FramePadding = ImVec2(3, 2);
-	style.ItemSpacing = ImVec2(4, 3);
-	style.ItemInnerSpacing = ImVec2(3, 3);
+	style.WindowPadding = ImVec2(12, 8);
+	style.FramePadding = ImVec2(10, 6);
+	style.ItemSpacing = ImVec2(8, 6);
+	style.ItemInnerSpacing = ImVec2(6, 4);
 	style.WindowRounding = 0.0f;
 	style.FrameRounding = 0.0f;
-	style.ScrollbarSize = 12.0f;
+	style.ScrollbarSize = 14.0f;
 	style.ScrollbarRounding = 0.0f;
-	style.GrabMinSize = 8.0f;
+	style.GrabMinSize = 12.0f;
 	style.GrabRounding = 0.0f;
 	style.ChildRounding = 0.0f;
 	style.PopupRounding = 0.0f;
 	style.TabRounding = 0.0f;
+	style.WindowBorderSize = 0.0f;
+	style.FrameBorderSize = 0.0f;
+	style.PopupBorderSize = 1.0f;
+	style.ChildBorderSize = 1.0f;
+
+	ImVec4* colors = style.Colors;
+	colors[ImGuiCol_Text] = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
+	colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+	colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.11f, 0.13f, 1.00f);
+	colors[ImGuiCol_ChildBg] = ImVec4(0.09f, 0.09f, 0.11f, 1.00f);
+	colors[ImGuiCol_PopupBg] = ImVec4(0.15f, 0.15f, 0.18f, 0.95f);
+	colors[ImGuiCol_Border] = ImVec4(0.25f, 0.25f, 0.30f, 1.00f);
+	colors[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.16f, 0.19f, 1.00f);
+	colors[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.22f, 0.27f, 1.00f);
+	colors[ImGuiCol_FrameBgActive] = ImVec4(0.28f, 0.28f, 0.33f, 1.00f);
+	colors[ImGuiCol_TitleBg] = ImVec4(0.13f, 0.13f, 0.15f, 1.00f);
+	colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.16f, 0.19f, 1.00f);
+	colors[ImGuiCol_MenuBarBg] = ImVec4(0.13f, 0.13f, 0.15f, 1.00f);
+	colors[ImGuiCol_ScrollbarBg] = ImVec4(0.09f, 0.09f, 0.11f, 1.00f);
+	colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.35f, 0.35f, 0.40f, 1.00f);
+	colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.45f, 0.50f, 1.00f);
+	colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.55f, 0.55f, 0.60f, 1.00f);
+	colors[ImGuiCol_CheckMark] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+	colors[ImGuiCol_SliderGrab] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+	colors[ImGuiCol_SliderGrabActive] = ImVec4(0.50f, 0.75f, 1.00f, 1.00f);
+	colors[ImGuiCol_Button] = ImVec4(0.22f, 0.22f, 0.27f, 1.00f);
+	colors[ImGuiCol_ButtonHovered] = ImVec4(0.32f, 0.32f, 0.38f, 1.00f);
+	colors[ImGuiCol_ButtonActive] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+	colors[ImGuiCol_Header] = ImVec4(0.22f, 0.22f, 0.27f, 1.00f);
+	colors[ImGuiCol_HeaderHovered] = ImVec4(0.32f, 0.32f, 0.38f, 1.00f);
+	colors[ImGuiCol_HeaderActive] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+	colors[ImGuiCol_Separator] = ImVec4(0.25f, 0.25f, 0.30f, 1.00f);
+	colors[ImGuiCol_ResizeGrip] = ImVec4(0.22f, 0.22f, 0.27f, 1.00f);
+	colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.32f, 0.32f, 0.38f, 1.00f);
+	colors[ImGuiCol_ResizeGripActive] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+	colors[ImGuiCol_Tab] = ImVec4(0.16f, 0.16f, 0.19f, 1.00f);
+	colors[ImGuiCol_TabHovered] = ImVec4(0.26f, 0.26f, 0.31f, 1.00f);
+	colors[ImGuiCol_TabActive] = ImVec4(0.22f, 0.22f, 0.27f, 1.00f);
+	colors[ImGuiCol_TableHeaderBg] = ImVec4(0.13f, 0.13f, 0.15f, 1.00f);
+	colors[ImGuiCol_TableBorderStrong] = ImVec4(0.25f, 0.25f, 0.30f, 1.00f);
+	colors[ImGuiCol_TableBorderLight] = ImVec4(0.18f, 0.18f, 0.21f, 1.00f);
+	colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+	colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.09f, 0.09f, 0.11f, 0.50f);
+	colors[ImGuiCol_TextSelectedBg] = ImVec4(0.40f, 0.70f, 1.00f, 0.35f);
+	colors[ImGuiCol_NavHighlight] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
 
 	ImGui_ImplWin32_Init(m_hWnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
@@ -253,8 +309,12 @@ void MainWindow::RenderUI() {
 		ImGuiWindowFlags_NoBringToFrontOnFocus);
 
 	if (ImGui::BeginMenuBar()) {
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 1));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(12, 4));
+		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.9f, 0.95f, 1.0f));
 		ImGui::Text("Runtime Inspector");
+		ImGui::PopStyleColor();
+		ImGui::PopFont();
 		ImGui::PopStyleVar();
 		ImGui::EndMenuBar();
 	}
@@ -275,9 +335,16 @@ void MainWindow::RenderUI() {
 			RenderInjectionMethod();
 			ImGui::Spacing();
 			
-			if (ImGui::Button("Inject DLL", ImVec2(-1, 35))) {
+			ImGui::Spacing();
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.60f, 0.90f, 1.00f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.65f, 0.95f, 1.00f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.55f, 0.85f, 1.00f));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 12));
+			if (ImGui::Button("Inject DLL", ImVec2(-1, 42))) {
 				PerformInjection();
 			}
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor(3);
 			ImGui::EndTabItem();
 		}
 		
@@ -309,32 +376,46 @@ void MainWindow::RenderUI() {
 	ImGui::EndChild();
 
 	ImGui::End();
+
+	if (m_ShowProcessProperties) {
+		RenderProcessPropertiesWindow();
+	}
 }
 
 void MainWindow::RenderProcessList() {
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
 	ImGui::Text("Processes");
-	float buttonWidth = 70.0f;
+	ImGui::PopFont();
+	
+	float buttonWidth = 80.0f;
 	float spacing = ImGui::GetStyle().ItemSpacing.x;
-	ImGui::SameLine(ImGui::GetContentRegionAvail().x - (buttonWidth * 2 + spacing));
-	if (ImGui::SmallButton("Refresh")) {
+	float availableWidth = ImGui::GetContentRegionAvail().x;
+	ImGui::SameLine(availableWidth - (buttonWidth * 2 + spacing));
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 6));
+	if (ImGui::Button("Refresh", ImVec2(buttonWidth, 0))) {
 		RefreshProcessList();
 	}
 	ImGui::SameLine();
-	if (ImGui::SmallButton("Export")) {
+	if (ImGui::Button("Export", ImVec2(buttonWidth, 0))) {
 		ExportProcessList();
 	}
+	ImGui::PopStyleVar();
 	
 	ImGui::Spacing();
 	ImGui::PushItemWidth(-1);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
 	if (ImGui::InputText("##Filter", m_ProcessFilter, sizeof(m_ProcessFilter))) {
 	}
+	ImGui::PopStyleVar();
 	ImGui::PopItemWidth();
 	if (m_ProcessFilter[0] == '\0') {
 		ImVec2 pos = ImGui::GetItemRectMin();
 		pos.x += ImGui::GetStyle().FramePadding.x;
 		pos.y += ImGui::GetStyle().FramePadding.y;
 		ImGui::SetCursorPos(pos);
-		ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 0.8f), "Filter...");
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+		ImGui::Text("Search processes...");
+		ImGui::PopStyleColor();
 	}
 
 	ImGui::Spacing();
@@ -440,18 +521,30 @@ void MainWindow::RenderProcessList() {
 }
 
 void MainWindow::RenderDllSelection() {
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
 	ImGui::Text("DLL Path");
-	ImGui::PushItemWidth(-80);
-	ImGui::InputText("##DllPath", m_DllPathBuffer, sizeof(m_DllPathBuffer));
+	ImGui::PopFont();
+	ImGui::Spacing();
+	
+	ImGui::PushItemWidth(-90);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+	ImGui::InputTextWithHint("##DllPath", "Select DLL file to inject...", m_DllPathBuffer, sizeof(m_DllPathBuffer));
+	ImGui::PopStyleVar();
 	ImGui::PopItemWidth();
 	ImGui::SameLine();
-	if (ImGui::Button("Browse", ImVec2(70, 0))) {
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+	if (ImGui::Button("Browse", ImVec2(80, 0))) {
 		BrowseForDll();
 	}
+	ImGui::PopStyleVar();
 }
 
 void MainWindow::RenderInjectionMethod() {
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
 	ImGui::Text("Injection Method");
+	ImGui::PopFont();
+	ImGui::Spacing();
+	
 	const char* methods[] = {
 		"CreateRemoteThread",
 		"NtCreateThreadEx",
@@ -459,44 +552,70 @@ void MainWindow::RenderInjectionMethod() {
 		"SetWindowsHookEx",
 		"RtlCreateUserThread"
 	};
+	ImGui::PushItemWidth(-1);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
 	ImGui::Combo("##Method", &m_SelectedInjectionMethod, methods, IM_ARRAYSIZE(methods));
+	ImGui::PopStyleVar();
+	ImGui::PopItemWidth();
+	
+	ImGui::Spacing();
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+	ImGui::TextWrapped("Note: Some methods may require elevated privileges or specific process architectures.");
+	ImGui::PopStyleColor();
 }
 
 void MainWindow::RenderStatusBar() {
 	ImGui::Separator();
-	ImGui::Text("Status: %s", m_StatusMessage.c_str());
+	ImGui::Spacing();
+	
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.8f, 1.0f, 1.0f));
+	ImGui::Text("Status:");
+	ImGui::PopStyleColor();
+	ImGui::SameLine();
+	ImGui::Text("%s", m_StatusMessage.c_str());
 	
 	if (!m_LogMessages.empty()) {
 		ImGui::Spacing();
-		ImGui::Text("Log:");
-		ImGui::BeginChild("Log", ImVec2(0, 120), true);
+		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+		ImGui::Text("Activity Log");
+		ImGui::PopFont();
+		ImGui::BeginChild("Log", ImVec2(0, 160), true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 3));
 		for (const auto& msg : m_LogMessages) {
 			ImGui::TextWrapped("%s", msg.c_str());
 		}
-		ImGui::SetScrollHereY(1.0f);
+		ImGui::PopStyleVar();
+		if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f) {
+			ImGui::SetScrollHereY(1.0f);
+		}
 		ImGui::EndChild();
 	}
 }
 
 void MainWindow::RenderProcessDetails() {
 	if (m_SelectedProcessIndex < 0 || m_SelectedProcessIndex >= (int)m_Processes.size()) {
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 		ImGui::Text("Select a process to view details");
+		ImGui::PopStyleColor();
 		return;
 	}
 
 	DWORD pid = m_Processes[m_SelectedProcessIndex].ProcessId;
 	
-	if (ImGui::Button("Refresh Details")) {
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 6));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 0));
+	if (ImGui::Button("Refresh Details", ImVec2(0, 0))) {
 		RefreshProcessDetails();
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Refresh Threads")) {
+	if (ImGui::Button("Refresh Threads", ImVec2(0, 0))) {
 		RefreshThreads(pid);
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("Refresh Modules")) {
+	if (ImGui::Button("Refresh Modules", ImVec2(0, 0))) {
 		RefreshModules(pid);
 	}
+	ImGui::PopStyleVar(2);
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -521,9 +640,13 @@ void MainWindow::RenderProcessDetails() {
 	FILETIME creationTime, exitTime, kernelTime, userTime;
 	if (GetProcessTimes(hProcess, &creationTime, &exitTime, &kernelTime, &userTime)) {
 		ImGui::Spacing();
-		ImGui::Text("Process Times:");
+		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+		ImGui::Text("Process Times");
+		ImGui::PopFont();
+		ImGui::Spacing();
 		SYSTEMTIME st;
 		FileTimeToSystemTime(&creationTime, &st);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.85f, 1.0f, 1.0f));
 		ImGui::BulletText("Creation Time: %02d:%02d:%02d", st.wHour, st.wMinute, st.wSecond);
 		
 		ULARGE_INTEGER kernel, user;
@@ -534,13 +657,19 @@ void MainWindow::RenderProcessDetails() {
 		
 		ImGui::BulletText("Kernel Time: %.2f seconds", kernel.QuadPart / 10000000.0);
 		ImGui::BulletText("User Time: %.2f seconds", user.QuadPart / 10000000.0);
+		ImGui::PopStyleColor();
 	}
 
 	char exePath[MAX_PATH] = { 0 };
 	if (GetModuleFileNameExA(hProcess, nullptr, exePath, MAX_PATH)) {
 		ImGui::Spacing();
-		ImGui::Text("Executable Path:");
+		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+		ImGui::Text("Executable Path");
+		ImGui::PopFont();
+		ImGui::Spacing();
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.9f, 1.0f));
 		ImGui::TextWrapped("%s", exePath);
+		ImGui::PopStyleColor();
 	}
 
 	CloseHandle(hProcess);
@@ -548,15 +677,19 @@ void MainWindow::RenderProcessDetails() {
 
 void MainWindow::RenderThreadManager() {
 	if (m_SelectedProcessIndex < 0 || m_SelectedProcessIndex >= (int)m_Processes.size()) {
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 		ImGui::Text("Select a process to view threads");
+		ImGui::PopStyleColor();
 		return;
 	}
 
 	DWORD pid = m_Processes[m_SelectedProcessIndex].ProcessId;
 	
-	if (ImGui::Button("Refresh Threads")) {
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 6));
+	if (ImGui::Button("Refresh Threads", ImVec2(150, 0))) {
 		RefreshThreads(pid);
 	}
+	ImGui::PopStyleVar();
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -579,18 +712,26 @@ void MainWindow::RenderThreadManager() {
 			
 			ImGui::TableSetColumnIndex(2);
 			ImGui::PushID(thread.ThreadId);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
 			if (thread.State == "Running") {
-				if (ImGui::SmallButton("Suspend")) {
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.5f, 0.2f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.6f, 0.3f, 1.0f));
+				if (ImGui::Button("Suspend", ImVec2(80, 0))) {
 					SuspendThread(thread.ThreadId);
 					RefreshThreads(pid);
 				}
+				ImGui::PopStyleColor(2);
 			}
 			else if (thread.State == "Suspended") {
-				if (ImGui::SmallButton("Resume")) {
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.4f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.5f, 1.0f));
+				if (ImGui::Button("Resume", ImVec2(80, 0))) {
 					ResumeThread(thread.ThreadId);
 					RefreshThreads(pid);
 				}
+				ImGui::PopStyleColor(2);
 			}
+			ImGui::PopStyleVar();
 			ImGui::PopID();
 		}
 		ImGui::EndTable();
@@ -599,15 +740,19 @@ void MainWindow::RenderThreadManager() {
 
 void MainWindow::RenderModuleInspector() {
 	if (m_SelectedProcessIndex < 0 || m_SelectedProcessIndex >= (int)m_Processes.size()) {
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 		ImGui::Text("Select a process to view modules");
+		ImGui::PopStyleColor();
 		return;
 	}
 
 	DWORD pid = m_Processes[m_SelectedProcessIndex].ProcessId;
 	
-	if (ImGui::Button("Refresh Modules")) {
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 6));
+	if (ImGui::Button("Refresh Modules", ImVec2(150, 0))) {
 		RefreshModules(pid);
 	}
+	ImGui::PopStyleVar();
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -641,22 +786,33 @@ void MainWindow::RenderModuleInspector() {
 
 void MainWindow::RenderMemoryAnalyzer() {
 	if (m_SelectedProcessIndex < 0 || m_SelectedProcessIndex >= (int)m_Processes.size()) {
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 		ImGui::Text("Select a process to analyze memory");
+		ImGui::PopStyleColor();
 		return;
 	}
 
 	DWORD pid = m_Processes[m_SelectedProcessIndex].ProcessId;
 
-	ImGui::Text("Memory Reader:");
-	ImGui::PushItemWidth(200);
-	ImGui::InputText("Address (hex)", m_MemoryAddressBuffer, sizeof(m_MemoryAddressBuffer));
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+	ImGui::Text("Memory Reader");
+	ImGui::PopFont();
+	ImGui::Spacing();
+	
+	ImGui::PushItemWidth(220);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+	ImGui::InputTextWithHint("##Address", "Address (hex)", m_MemoryAddressBuffer, sizeof(m_MemoryAddressBuffer));
+	ImGui::PopStyleVar();
 	ImGui::PopItemWidth();
 	ImGui::SameLine();
-	ImGui::PushItemWidth(150);
-	ImGui::InputText("Size (bytes)", m_MemorySizeBuffer, sizeof(m_MemorySizeBuffer));
+	ImGui::PushItemWidth(160);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+	ImGui::InputTextWithHint("##Size", "Size (bytes)", m_MemorySizeBuffer, sizeof(m_MemorySizeBuffer));
+	ImGui::PopStyleVar();
 	ImGui::PopItemWidth();
 	ImGui::SameLine();
-	if (ImGui::Button("Read")) {
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+	if (ImGui::Button("Read", ImVec2(80, 0))) {
 		ULONG_PTR addr = 0;
 		SIZE_T size = 0;
 		sscanf_s(m_MemoryAddressBuffer, "%llx", &addr);
@@ -665,21 +821,30 @@ void MainWindow::RenderMemoryAnalyzer() {
 			ReadProcessMemory(pid, (LPCVOID)addr, size);
 		}
 	}
+	ImGui::PopStyleVar();
 
 	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	ImGui::Text("String Search:");
-	ImGui::PushItemWidth(-80);
-	ImGui::InputText("##SearchString", m_SearchStringBuffer, sizeof(m_SearchStringBuffer));
+	ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+	ImGui::Text("String Search");
+	ImGui::PopFont();
+	ImGui::Spacing();
+	
+	ImGui::PushItemWidth(-90);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+	ImGui::InputTextWithHint("##SearchString", "Enter string to search...", m_SearchStringBuffer, sizeof(m_SearchStringBuffer));
+	ImGui::PopStyleVar();
 	ImGui::PopItemWidth();
 	ImGui::SameLine();
-	if (ImGui::Button("Search")) {
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
+	if (ImGui::Button("Search", ImVec2(80, 0))) {
 		if (strlen(m_SearchStringBuffer) > 0) {
 			SearchMemoryStrings(pid);
 		}
 	}
+	ImGui::PopStyleVar();
 
 	if (!m_MemorySearchResults.empty()) {
 		ImGui::Spacing();
@@ -1118,7 +1283,150 @@ void MainWindow::SearchProcessOnline(const std::string& processName) {
 
 void MainWindow::ShowProcessProperties(DWORD processId) {
 	m_ShowProcessProperties = true;
+	m_CurrentProcessDetails.ProcessId = processId;
+	for (size_t i = 0; i < m_Processes.size(); i++) {
+		if (m_Processes[i].ProcessId == processId) {
+			m_SelectedProcessIndex = (int)i;
+			m_CurrentProcessDetails.ProcessName = m_Processes[i].ProcessName;
+			m_CurrentProcessDetails.Architecture = m_Processes[i].Architecture;
+			break;
+		}
+	}
 	RefreshProcessDetails();
+}
+
+void MainWindow::RenderProcessPropertiesWindow() {
+	if (!m_ShowProcessProperties) {
+		return;
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+	
+	if (ImGui::Begin("Process Properties", &m_ShowProcessProperties, ImGuiWindowFlags_None)) {
+		if (m_CurrentProcessDetails.ProcessId == 0) {
+			ImGui::Text("No process selected");
+			ImGui::End();
+			return;
+		}
+
+		ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+		ImGui::Text("Process Information");
+		ImGui::PopFont();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		ImGui::Text("Process Name:");
+		ImGui::SameLine(150);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.9f, 1.0f));
+		ImGui::Text("%s", m_CurrentProcessDetails.ProcessName.c_str());
+		ImGui::PopStyleColor();
+
+		ImGui::Text("Process ID:");
+		ImGui::SameLine(150);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.9f, 1.0f));
+		ImGui::Text("%lu", m_CurrentProcessDetails.ProcessId);
+		ImGui::PopStyleColor();
+
+		ImGui::Text("Architecture:");
+		ImGui::SameLine(150);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.9f, 1.0f));
+		ImGui::Text("%s", m_CurrentProcessDetails.Architecture.c_str());
+		ImGui::PopStyleColor();
+
+		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, m_CurrentProcessDetails.ProcessId);
+		if (hProcess) {
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+			ImGui::Text("Memory Information");
+			ImGui::PopFont();
+			ImGui::Spacing();
+
+			PROCESS_MEMORY_COUNTERS_EX pmc = {};
+			if (GetProcessMemoryInfo(hProcess, (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
+				ImGui::Text("Working Set:");
+				ImGui::SameLine(150);
+				ImGui::Text("%.2f MB", pmc.WorkingSetSize / (1024.0 * 1024.0));
+
+				ImGui::Text("Peak Working Set:");
+				ImGui::SameLine(150);
+				ImGui::Text("%.2f MB", pmc.PeakWorkingSetSize / (1024.0 * 1024.0));
+
+				ImGui::Text("Page File Usage:");
+				ImGui::SameLine(150);
+				ImGui::Text("%.2f MB", pmc.PagefileUsage / (1024.0 * 1024.0));
+
+				ImGui::Text("Private Usage:");
+				ImGui::SameLine(150);
+				ImGui::Text("%.2f MB", pmc.PrivateUsage / (1024.0 * 1024.0));
+			}
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+			ImGui::Text("Process Times");
+			ImGui::PopFont();
+			ImGui::Spacing();
+
+			FILETIME creationTime, exitTime, kernelTime, userTime;
+			if (GetProcessTimes(hProcess, &creationTime, &exitTime, &kernelTime, &userTime)) {
+				SYSTEMTIME st;
+				FileTimeToSystemTime(&creationTime, &st);
+				ImGui::Text("Creation Time:");
+				ImGui::SameLine(150);
+				ImGui::Text("%04d-%02d-%02d %02d:%02d:%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+				ULARGE_INTEGER kernel, user;
+				kernel.LowPart = kernelTime.dwLowDateTime;
+				kernel.HighPart = kernelTime.dwHighDateTime;
+				user.LowPart = userTime.dwLowDateTime;
+				user.HighPart = userTime.dwHighDateTime;
+
+				ImGui::Text("Kernel Time:");
+				ImGui::SameLine(150);
+				ImGui::Text("%.2f seconds", kernel.QuadPart / 10000000.0);
+
+				ImGui::Text("User Time:");
+				ImGui::SameLine(150);
+				ImGui::Text("%.2f seconds", user.QuadPart / 10000000.0);
+			}
+
+			char exePath[MAX_PATH] = { 0 };
+			if (GetModuleFileNameExA(hProcess, nullptr, exePath, MAX_PATH)) {
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+
+				ImGui::PushFont(ImGui::GetIO().Fonts->Fonts.Size > 1 ? ImGui::GetIO().Fonts->Fonts[1] : nullptr);
+				ImGui::Text("Executable Path");
+				ImGui::PopFont();
+				ImGui::Spacing();
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.9f, 1.0f));
+				ImGui::TextWrapped("%s", exePath);
+				ImGui::PopStyleColor();
+			}
+
+			CloseHandle(hProcess);
+		}
+		else {
+			ImGui::Spacing();
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to open process (Access Denied)");
+		}
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		if (ImGui::Button("Close", ImVec2(100, 0))) {
+			m_ShowProcessProperties = false;
+		}
+	}
+	ImGui::End();
 }
 
 void MainWindow::ExportProcessList() {

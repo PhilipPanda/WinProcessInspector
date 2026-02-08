@@ -20,7 +20,10 @@ namespace Core {
 bool DetectSystemInfo() {
 	printf("Determining Windows NT version and architecture...\n");
 
-	bool is64bit = (sizeof(void*) != 4);
+	SYSTEM_INFO si;
+	GetNativeSystemInfo(&si);
+	bool is64bit = (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ||
+	                 si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64);
 
 	if (is64bit)
 		printf("The architecture of OS : 64bit\n");
