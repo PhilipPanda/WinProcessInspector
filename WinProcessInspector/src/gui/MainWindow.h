@@ -73,9 +73,9 @@ namespace GUI {
 		void OnFileExit();
 		
 		// Export functions
-		bool ExportToCSV(const std::wstring& filePath);
-		bool ExportToJSON(const std::wstring& filePath);
-		bool ExportToText(const std::wstring& filePath);
+		bool ExportToCSV(const std::wstring& filePath, const std::vector<WinProcessInspector::Core::ProcessInfo>& processes);
+		bool ExportToJSON(const std::wstring& filePath, const std::vector<WinProcessInspector::Core::ProcessInfo>& processes);
+		bool ExportToText(const std::wstring& filePath, const std::vector<WinProcessInspector::Core::ProcessInfo>& processes);
 		
 		void OnViewTreeView();
 		void OnViewToolbar();

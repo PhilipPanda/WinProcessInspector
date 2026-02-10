@@ -1649,7 +1649,14 @@ void MainWindow::OnFileExit() {
 }
 
 void MainWindow::OnFileExport() {
+	if (m_Processes.empty()) {
+		MessageBoxW(m_hWnd, L"No process data available. Please refresh the process list first.", L"Export Failed", MB_OK | MB_ICONWARNING);
+		return;
+	}
+	
 	BuildProcessHierarchy();
+	
+	const auto& processesToExport = m_FilteredProcesses.empty() ? m_Processes : m_FilteredProcesses;
 	
 	OPENFILENAMEW ofn = {};
 	wchar_t szFile[260] = {};
@@ -1667,20 +1674,24 @@ void MainWindow::OnFileExport() {
 	ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
 
 	if (!GetSaveFileNameW(&ofn)) {
-		return; // User cancelled
+		return;
 	}
 
 	std::wstring filePath(szFile);
-	std::wstring extension = filePath.substr(filePath.find_last_of(L".") + 1);
-	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
+	std::wstring extension;
+	size_t dotPos = filePath.find_last_of(L".");
+	if (dotPos != std::wstring::npos && dotPos + 1 < filePath.length()) {
+		extension = filePath.substr(dotPos + 1);
+		std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
+	}
 
 	bool success = false;
 	if (extension == L"csv") {
-		success = ExportToCSV(filePath);
+		success = ExportToCSV(filePath, processesToExport);
 	} else if (extension == L"json") {
-		success = ExportToJSON(filePath);
+		success = ExportToJSON(filePath, processesToExport);
 	} else {
-		success = ExportToText(filePath);
+		success = ExportToText(filePath, processesToExport);
 	}
 
 	if (success) {
@@ -1706,7 +1717,31 @@ void MainWindow::OnFileExport() {
 	}
 }
 
-bool MainWindow::ExportToCSV(const std::wstring& filePath) {
+static std::wstring Utf8ToWide(const std::string& utf8) {
+	if (utf8.empty()) return L"";
+	int sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+	if (sizeNeeded <= 0) return L"";
+	std::wstring result(sizeNeeded, 0);
+	MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &result[0], sizeNeeded);
+	result.pop_back();
+	return result;
+}
+
+static std::string WideToUtf8(const std::wstring& wide) {
+	if (wide.empty()) return "";
+	int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
+	if (sizeNeeded <= 0) return "";
+	std::string result(sizeNeeded, 0);
+	WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, &result[0], sizeNeeded, nullptr, nullptr);
+	result.pop_back();
+	return result;
+}
+
+bool MainWindow::ExportToCSV(const std::wstring& filePath, const std::vector<WinProcessInspector::Core::ProcessInfo>& processes) {
+	if (processes.empty()) {
+		return false;
+	}
+
 	FILE* file = nullptr;
 	if (_wfopen_s(&file, filePath.c_str(), L"w,ccs=UTF-8") != 0 || !file) {
 		return false;
@@ -1714,56 +1749,70 @@ bool MainWindow::ExportToCSV(const std::wstring& filePath) {
 
 	fprintf(file, "\xEF\xBB\xBF");
 	fprintf(file, "Name,PID,Parent PID,CPU%%,Memory,Session,Integrity,User,Architecture,Description,Image Path\n");
-
-	for (const auto& proc : m_FilteredProcesses) {
-		std::wstring name(proc.ProcessName.begin(), proc.ProcessName.end());
-		std::wstring user = proc.UserName.empty() ? L"N/A" : proc.UserName;
-		std::wstring integrity = FormatIntegrityLevel(proc.IntegrityLevel);
-		std::wstring arch(proc.Architecture.begin(), proc.Architecture.end());
-		
-		std::wstring imagePath = GetProcessImagePath(proc.ProcessId);
-		std::wstring description = L"N/A";
-		
-		double cpuUsage = GetCpuUsage(proc.ProcessId);
-		SIZE_T memory = 0;
-		auto memIt = m_ProcessMemory.find(proc.ProcessId);
-		if (memIt != m_ProcessMemory.end()) {
-			memory = memIt->second;
-		}
-
-		auto escapeCSV = [](const std::wstring& str) -> std::wstring {
-			if (str.find(L",") != std::wstring::npos || str.find(L"\"") != std::wstring::npos || str.find(L"\n") != std::wstring::npos) {
-				std::wstring escaped = L"\"";
-				for (wchar_t c : str) {
-					if (c == L'"') escaped += L"\"\"";
-					else escaped += c;
-				}
-				escaped += L"\"";
-				return escaped;
+	auto escapeCSV = [](const std::string& str) -> std::string {
+		if (str.find(",") != std::string::npos || str.find("\"") != std::string::npos || str.find("\n") != std::string::npos) {
+			std::string escaped = "\"";
+			for (char c : str) {
+				if (c == '"') escaped += "\"\"";
+				else escaped += c;
 			}
-			return str;
-		};
+			escaped += "\"";
+			return escaped;
+		}
+		return str;
+	};
 
-		fprintf(file, "%ls,%u,%u,%.2f,%llu,%u,%ls,%ls,%ls,%ls,%ls\n",
-			escapeCSV(name).c_str(),
-			proc.ProcessId,
-			proc.ParentProcessId,
-			cpuUsage,
-			static_cast<unsigned long long>(memory),
-			proc.SessionId,
-			escapeCSV(integrity).c_str(),
-			escapeCSV(user).c_str(),
-			escapeCSV(arch).c_str(),
-			escapeCSV(description).c_str(),
-			escapeCSV(imagePath).c_str()
-		);
+	for (const auto& proc : processes) {
+		try {
+			std::string name = proc.ProcessName;
+			std::string user = WideToUtf8(proc.UserName.empty() ? L"N/A" : proc.UserName);
+			std::string integrity = WideToUtf8(FormatIntegrityLevel(proc.IntegrityLevel));
+			std::string arch = proc.Architecture;
+			
+			std::wstring imagePathW = GetProcessImagePath(proc.ProcessId);
+			std::string imagePath = WideToUtf8(imagePathW.empty() ? L"N/A" : imagePathW);
+			std::string description = "N/A";
+			
+			double cpuUsage = 0.0;
+			try {
+				cpuUsage = GetCpuUsage(proc.ProcessId);
+			} catch (...) {
+				cpuUsage = 0.0;
+			}
+			
+			SIZE_T memory = 0;
+			auto memIt = m_ProcessMemory.find(proc.ProcessId);
+			if (memIt != m_ProcessMemory.end()) {
+				memory = memIt->second;
+			}
+
+			fprintf(file, "%s,%u,%u,%.2f,%llu,%u,%s,%s,%s,%s,%s\n",
+				escapeCSV(name).c_str(),
+				proc.ProcessId,
+				proc.ParentProcessId,
+				cpuUsage,
+				static_cast<unsigned long long>(memory),
+				proc.SessionId,
+				escapeCSV(integrity).c_str(),
+				escapeCSV(user).c_str(),
+				escapeCSV(arch).c_str(),
+				escapeCSV(description).c_str(),
+				escapeCSV(imagePath).c_str()
+			);
+		} catch (...) {
+			continue;
+		}
 	}
 
 	fclose(file);
 	return true;
 }
 
-bool MainWindow::ExportToJSON(const std::wstring& filePath) {
+bool MainWindow::ExportToJSON(const std::wstring& filePath, const std::vector<WinProcessInspector::Core::ProcessInfo>& processes) {
+	if (processes.empty()) {
+		return false;
+	}
+
 	FILE* file = nullptr;
 	if (_wfopen_s(&file, filePath.c_str(), L"w,ccs=UTF-8") != 0 || !file) {
 		return false;
@@ -1771,49 +1820,60 @@ bool MainWindow::ExportToJSON(const std::wstring& filePath) {
 
 	fprintf(file, "{\n  \"processes\": [\n");
 
-	for (size_t i = 0; i < m_FilteredProcesses.size(); ++i) {
-		const auto& proc = m_FilteredProcesses[i];
-		std::wstring name(proc.ProcessName.begin(), proc.ProcessName.end());
-		std::wstring user = proc.UserName.empty() ? L"N/A" : proc.UserName;
-		std::wstring integrity = FormatIntegrityLevel(proc.IntegrityLevel);
-		std::wstring arch(proc.Architecture.begin(), proc.Architecture.end());
-		
-		std::wstring imagePath = GetProcessImagePath(proc.ProcessId);
-		std::wstring description = L"N/A";
-		
-		double cpuUsage = GetCpuUsage(proc.ProcessId);
-		SIZE_T memory = 0;
-		auto memIt = m_ProcessMemory.find(proc.ProcessId);
-		if (memIt != m_ProcessMemory.end()) {
-			memory = memIt->second;
+	auto escapeJSON = [](const std::string& str) -> std::string {
+		std::string escaped;
+		for (char c : str) {
+			if (c == '"') escaped += "\\\"";
+			else if (c == '\\') escaped += "\\\\";
+			else if (c == '\n') escaped += "\\n";
+			else if (c == '\r') escaped += "\\r";
+			else if (c == '\t') escaped += "\\t";
+			else escaped += c;
 		}
+		return escaped;
+	};
 
-		auto escapeJSON = [](const std::wstring& str) -> std::wstring {
-			std::wstring escaped;
-			for (wchar_t c : str) {
-				if (c == L'"') escaped += L"\\\"";
-				else if (c == L'\\') escaped += L"\\\\";
-				else if (c == L'\n') escaped += L"\\n";
-				else if (c == L'\r') escaped += L"\\r";
-				else if (c == L'\t') escaped += L"\\t";
-				else escaped += c;
+	for (size_t i = 0; i < processes.size(); ++i) {
+		const auto& proc = processes[i];
+		try {
+			std::string name = proc.ProcessName;
+			std::string user = WideToUtf8(proc.UserName.empty() ? L"N/A" : proc.UserName);
+			std::string integrity = WideToUtf8(FormatIntegrityLevel(proc.IntegrityLevel));
+			std::string arch = proc.Architecture;
+			
+			std::wstring imagePathW = GetProcessImagePath(proc.ProcessId);
+			std::string imagePath = WideToUtf8(imagePathW.empty() ? L"N/A" : imagePathW);
+			std::string description = "N/A";
+			
+			double cpuUsage = 0.0;
+			try {
+				cpuUsage = GetCpuUsage(proc.ProcessId);
+			} catch (...) {
+				cpuUsage = 0.0;
 			}
-			return escaped;
-		};
+			
+			SIZE_T memory = 0;
+			auto memIt = m_ProcessMemory.find(proc.ProcessId);
+			if (memIt != m_ProcessMemory.end()) {
+				memory = memIt->second;
+			}
 
-		fprintf(file, "    {\n");
-		fprintf(file, "      \"name\": \"%ls\",\n", escapeJSON(name).c_str());
-		fprintf(file, "      \"pid\": %u,\n", proc.ProcessId);
-		fprintf(file, "      \"parentPid\": %u,\n", proc.ParentProcessId);
-		fprintf(file, "      \"cpuUsage\": %.2f,\n", cpuUsage);
-		fprintf(file, "      \"memory\": %llu,\n", static_cast<unsigned long long>(memory));
-		fprintf(file, "      \"sessionId\": %u,\n", proc.SessionId);
-		fprintf(file, "      \"integrity\": \"%ls\",\n", escapeJSON(integrity).c_str());
-		fprintf(file, "      \"user\": \"%ls\",\n", escapeJSON(user).c_str());
-		fprintf(file, "      \"architecture\": \"%ls\",\n", escapeJSON(arch).c_str());
-		fprintf(file, "      \"description\": \"%ls\",\n", escapeJSON(description).c_str());
-		fprintf(file, "      \"imagePath\": \"%ls\"\n", escapeJSON(imagePath).c_str());
-		fprintf(file, "    }%s\n", (i < m_FilteredProcesses.size() - 1) ? "," : "");
+			fprintf(file, "    {\n");
+			fprintf(file, "      \"name\": \"%s\",\n", escapeJSON(name).c_str());
+			fprintf(file, "      \"pid\": %u,\n", proc.ProcessId);
+			fprintf(file, "      \"parentPid\": %u,\n", proc.ParentProcessId);
+			fprintf(file, "      \"cpuUsage\": %.2f,\n", cpuUsage);
+			fprintf(file, "      \"memory\": %llu,\n", static_cast<unsigned long long>(memory));
+			fprintf(file, "      \"sessionId\": %u,\n", proc.SessionId);
+			fprintf(file, "      \"integrity\": \"%s\",\n", escapeJSON(integrity).c_str());
+			fprintf(file, "      \"user\": \"%s\",\n", escapeJSON(user).c_str());
+			fprintf(file, "      \"architecture\": \"%s\",\n", escapeJSON(arch).c_str());
+			fprintf(file, "      \"description\": \"%s\",\n", escapeJSON(description).c_str());
+			fprintf(file, "      \"imagePath\": \"%s\"\n", escapeJSON(imagePath).c_str());
+			fprintf(file, "    }%s\n", (i < processes.size() - 1) ? "," : "");
+		} catch (...) {
+			continue;
+		}
 	}
 
 	fprintf(file, "  ]\n}\n");
@@ -1821,7 +1881,7 @@ bool MainWindow::ExportToJSON(const std::wstring& filePath) {
 	return true;
 }
 
-bool MainWindow::ExportToText(const std::wstring& filePath) {
+bool MainWindow::ExportToText(const std::wstring& filePath, const std::vector<WinProcessInspector::Core::ProcessInfo>& processes) {
 	FILE* file = nullptr;
 	if (_wfopen_s(&file, filePath.c_str(), L"w,ccs=UTF-8") != 0 || !file) {
 		return false;
@@ -1833,16 +1893,16 @@ bool MainWindow::ExportToText(const std::wstring& filePath) {
 	FILETIME ft;
 	SystemTimeToFileTime(&st, &ft);
 	fwprintf(file, L"Generated: %ls\n", FormatTime(ft).c_str());
-	fwprintf(file, L"Total Processes: %zu\n\n", m_FilteredProcesses.size());
+	fwprintf(file, L"Total Processes: %zu\n\n", processes.size());
 	fwprintf(file, L"%-30s %8s %8s %8s %12s %8s %15s %-20s %12s %-30s %s\n",
 		L"Name", L"PID", L"PPID", L"CPU%", L"Memory", L"Session", L"Integrity", L"User", L"Architecture", L"Description", L"Image Path");
 	fwprintf(file, L"%s\n", std::wstring(150, L'-').c_str());
 
-	for (const auto& proc : m_FilteredProcesses) {
-		std::wstring name(proc.ProcessName.begin(), proc.ProcessName.end());
+	for (const auto& proc : processes) {
+		std::wstring name = Utf8ToWide(proc.ProcessName);
 		std::wstring user = proc.UserName.empty() ? L"N/A" : proc.UserName;
 		std::wstring integrity = FormatIntegrityLevel(proc.IntegrityLevel);
-		std::wstring arch(proc.Architecture.begin(), proc.Architecture.end());
+		std::wstring arch = Utf8ToWide(proc.Architecture);
 		
 		std::wstring imagePath = GetProcessImagePath(proc.ProcessId);
 		std::wstring description = L"N/A";
@@ -1939,7 +1999,6 @@ INT_PTR CALLBACK ColumnChooserDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LP
 		MainWindow* pMainWindow = reinterpret_cast<MainWindow*>(lParam);
 		SetWindowLongPtr(hDlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pMainWindow));
 		
-		// Map column IDs to column indices
 		struct ColumnCheckbox {
 			int controlId;
 			int columnIndex;
@@ -1973,7 +2032,7 @@ INT_PTR CALLBACK ColumnChooserDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LP
 	}
 	
 	if (uMsg == WM_COMMAND) {
-		if (LOWORD(wParam) == 1) { // IDOK
+		if (LOWORD(wParam) == 1) {
 			MainWindow* pMainWindow = reinterpret_cast<MainWindow*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
 			if (pMainWindow) {
 				struct ColumnCheckbox {
@@ -2009,7 +2068,7 @@ INT_PTR CALLBACK ColumnChooserDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LP
 			}
 			EndDialog(hDlg, 1);
 			return TRUE;
-		} else if (LOWORD(wParam) == 2) { // IDCANCEL
+		} else if (LOWORD(wParam) == 2) {
 			EndDialog(hDlg, 2);
 			return TRUE;
 		}
