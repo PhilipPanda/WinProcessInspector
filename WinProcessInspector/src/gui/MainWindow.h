@@ -67,6 +67,12 @@ namespace GUI {
 		void OnFileRefresh();
 		void OnFileExport();
 		void OnFileExit();
+		
+		// Export functions
+		bool ExportToCSV(const std::wstring& filePath);
+		bool ExportToJSON(const std::wstring& filePath);
+		bool ExportToText(const std::wstring& filePath);
+		
 		void OnViewAutoRefresh();
 		void OnViewToolbar();
 		void OnHelpAbout();
@@ -77,9 +83,11 @@ namespace GUI {
 		void SuspendProcess(DWORD processId);
 		void ResumeProcess(DWORD processId);
 		void InjectDll(DWORD processId);
+		int SelectInjectionMethod(DWORD processId);
 		void OpenProcessFileLocation(DWORD processId);
 		void CopyProcessId(DWORD processId);
 		void CopyProcessName(DWORD processId);
+		void SearchProcessOnline(DWORD processId);
 
 		// Validation layer
 		bool ValidateProcess(DWORD processId, std::wstring& errorMsg);
@@ -93,6 +101,9 @@ namespace GUI {
 		std::wstring FormatTime(const FILETIME& ft);
 		int GetProcessIconIndex(const std::wstring& imagePath);
 		std::wstring GetProcessImagePath(DWORD processId);
+		void CalculateCpuUsage();
+		void UpdateMemoryUsage();
+		double GetCpuUsage(DWORD processId) const;
 
 		HWND m_hWnd;
 		HINSTANCE m_hInstance;
@@ -114,7 +125,10 @@ namespace GUI {
 		std::unordered_map<DWORD, bool> m_ExpandedProcesses; // Track which processes are expanded
 		std::unordered_map<DWORD, std::vector<DWORD>> m_ProcessChildren; // PID -> children PIDs
 		std::unordered_map<DWORD, ULONGLONG> m_ProcessCpuTime; // PID -> last CPU time (for delta calculation)
+		std::unordered_map<DWORD, DWORD> m_ProcessCpuTimePrev; // PID -> previous CPU time snapshot
+		std::unordered_map<DWORD, double> m_ProcessCpuPercent; // PID -> CPU usage percentage
 		std::unordered_map<DWORD, SIZE_T> m_ProcessMemory; // PID -> private memory bytes
+		DWORD m_LastCpuUpdateTime; // Last time CPU was calculated
 		std::unordered_map<DWORD, int> m_ProcessDepth; // PID -> tree depth for display
 		DWORD m_SelectedProcessId;
 		int m_SortColumn;

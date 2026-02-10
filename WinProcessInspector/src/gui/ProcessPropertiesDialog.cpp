@@ -26,6 +26,9 @@ ProcessPropertiesDialog::ProcessPropertiesDialog(HINSTANCE hInstance, HWND hPare
 	, m_hMemoryTab(nullptr)
 	, m_hHandlesTab(nullptr)
 	, m_hSecurityTab(nullptr)
+	, m_hEnvironmentTab(nullptr)
+	, m_hNetworkTab(nullptr)
+	, m_hServicesTab(nullptr)
 	, m_hThreadListView(nullptr)
 	, m_hModuleListView(nullptr)
 	, m_hMemoryListView(nullptr)
@@ -161,24 +164,32 @@ bool ProcessPropertiesDialog::CreateTabs() {
 
 	const wchar_t* tabTexts[] = {
 		L"General",
+		L"Performance",
 		L"Threads",
 		L"Modules",
 		L"Memory",
 		L"Handles",
-		L"Security"
+		L"Security",
+		L"Environment",
+		L"Network",
+		L"Services"
 	};
 
-	for (int i = 0; i < 6; ++i) {
+	for (int i = 0; i < 10; ++i) {
 		tie.pszText = const_cast<LPWSTR>(tabTexts[i]);
 		TabCtrl_InsertItem(m_hTabControl, i, &tie);
 	}
 
 	CreateGeneralTab();
+	CreatePerformanceTab();
 	CreateThreadsTab();
 	CreateModulesTab();
 	CreateMemoryTab();
 	CreateHandlesTab();
 	CreateSecurityTab();
+	CreateEnvironmentTab();
+	CreateNetworkTab();
+	CreateServicesTab();
 
 	return true;
 }
@@ -197,6 +208,38 @@ void ProcessPropertiesDialog::CreateGeneralTab() {
 		rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
 		m_hDlg,
 		reinterpret_cast<HMENU>(IDC_GENERAL_TAB),
+		m_hInstance,
+		nullptr
+	);
+	
+	// Add Search Online button
+	HWND hSearchButton = CreateWindowW(
+		L"BUTTON",
+		L"Search Online",
+		WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_TABSTOP,
+		rc.left + 10, rc.top + 10,
+		120, 25,
+		m_hGeneralTab,
+		reinterpret_cast<HMENU>(IDC_SEARCH_ONLINE_BUTTON),
+		m_hInstance,
+		nullptr
+	);
+}
+
+void ProcessPropertiesDialog::CreatePerformanceTab() {
+	RECT rc;
+	GetWindowRect(m_hTabControl, &rc);
+	ScreenToClient(m_hDlg, reinterpret_cast<LPPOINT>(&rc));
+	TabCtrl_AdjustRect(m_hTabControl, FALSE, &rc);
+
+	m_hPerformanceTab = CreateWindowExW(
+		WS_EX_CONTROLPARENT,
+		L"STATIC",
+		L"",
+		WS_CHILD | WS_TABSTOP,
+		rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+		m_hDlg,
+		reinterpret_cast<HMENU>(IDC_PERFORMANCE_TAB),
 		m_hInstance,
 		nullptr
 	);
@@ -513,11 +556,15 @@ LRESULT ProcessPropertiesDialog::OnSize() {
 		RECT tabRc = rc;
 		TabCtrl_AdjustRect(m_hTabControl, FALSE, &tabRc);
 		if (m_hGeneralTab) SetWindowPos(m_hGeneralTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
+		if (m_hPerformanceTab) SetWindowPos(m_hPerformanceTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
 		if (m_hThreadsTab) SetWindowPos(m_hThreadsTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
 		if (m_hModulesTab) SetWindowPos(m_hModulesTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
 		if (m_hMemoryTab) SetWindowPos(m_hMemoryTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
 		if (m_hHandlesTab) SetWindowPos(m_hHandlesTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
 		if (m_hSecurityTab) SetWindowPos(m_hSecurityTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
+		if (m_hEnvironmentTab) SetWindowPos(m_hEnvironmentTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
+		if (m_hNetworkTab) SetWindowPos(m_hNetworkTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
+		if (m_hServicesTab) SetWindowPos(m_hServicesTab, nullptr, tabRc.left, tabRc.top, tabRc.right - tabRc.left, tabRc.bottom - tabRc.top, SWP_NOZORDER);
 		
 		// Resize list views
 		RECT listRc = tabRc;
@@ -546,37 +593,56 @@ LRESULT ProcessPropertiesDialog::OnSize() {
 void ProcessPropertiesDialog::OnTabChanged(int tabIndex) {
 	// Hide all tabs
 	ShowWindow(m_hGeneralTab, SW_HIDE);
+	ShowWindow(m_hPerformanceTab, SW_HIDE);
 	ShowWindow(m_hThreadsTab, SW_HIDE);
 	ShowWindow(m_hModulesTab, SW_HIDE);
 	ShowWindow(m_hMemoryTab, SW_HIDE);
 	ShowWindow(m_hHandlesTab, SW_HIDE);
 	ShowWindow(m_hSecurityTab, SW_HIDE);
+	ShowWindow(m_hEnvironmentTab, SW_HIDE);
+	ShowWindow(m_hNetworkTab, SW_HIDE);
+	ShowWindow(m_hServicesTab, SW_HIDE);
 
-	// Show selected tab
 	switch (tabIndex) {
 		case 0:
 			ShowWindow(m_hGeneralTab, SW_SHOW);
 			RefreshGeneralTab();
 			break;
 		case 1:
+			ShowWindow(m_hPerformanceTab, SW_SHOW);
+			RefreshPerformanceTab();
+			break;
+		case 2:
 			ShowWindow(m_hThreadsTab, SW_SHOW);
 			RefreshThreadsTab();
 			break;
-		case 2:
+		case 3:
 			ShowWindow(m_hModulesTab, SW_SHOW);
 			RefreshModulesTab();
 			break;
-		case 3:
+		case 4:
 			ShowWindow(m_hMemoryTab, SW_SHOW);
 			RefreshMemoryTab();
 			break;
-		case 4:
+		case 5:
 			ShowWindow(m_hHandlesTab, SW_SHOW);
 			RefreshHandlesTab();
 			break;
-		case 5:
+		case 6:
 			ShowWindow(m_hSecurityTab, SW_SHOW);
 			RefreshSecurityTab();
+			break;
+		case 7:
+			ShowWindow(m_hEnvironmentTab, SW_SHOW);
+			RefreshEnvironmentTab();
+			break;
+		case 8:
+			ShowWindow(m_hNetworkTab, SW_SHOW);
+			RefreshNetworkTab();
+			break;
+		case 9:
+			ShowWindow(m_hServicesTab, SW_SHOW);
+			RefreshServicesTab();
 			break;
 	}
 }
@@ -735,4 +801,99 @@ void ProcessPropertiesDialog::RefreshHandlesTab() {
 
 void ProcessPropertiesDialog::RefreshSecurityTab() {
 	// TODO: Populate security tab with token info
+}
+
+void ProcessPropertiesDialog::CreateEnvironmentTab() {
+	RECT rc;
+	GetWindowRect(m_hTabControl, &rc);
+	ScreenToClient(m_hDlg, reinterpret_cast<LPPOINT>(&rc));
+	TabCtrl_AdjustRect(m_hTabControl, FALSE, &rc);
+
+	m_hEnvironmentTab = CreateWindowExW(
+		WS_EX_CONTROLPARENT,
+		L"STATIC",
+		L"",
+		WS_CHILD | WS_TABSTOP,
+		rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+		m_hDlg,
+		reinterpret_cast<HMENU>(IDC_ENVIRONMENT_TAB),
+		m_hInstance,
+		nullptr
+	);
+}
+
+void ProcessPropertiesDialog::CreateNetworkTab() {
+	RECT rc;
+	GetWindowRect(m_hTabControl, &rc);
+	ScreenToClient(m_hDlg, reinterpret_cast<LPPOINT>(&rc));
+	TabCtrl_AdjustRect(m_hTabControl, FALSE, &rc);
+
+	m_hNetworkTab = CreateWindowExW(
+		WS_EX_CONTROLPARENT,
+		L"STATIC",
+		L"",
+		WS_CHILD | WS_TABSTOP,
+		rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+		m_hDlg,
+		reinterpret_cast<HMENU>(IDC_NETWORK_TAB),
+		m_hInstance,
+		nullptr
+	);
+}
+
+void ProcessPropertiesDialog::CreateServicesTab() {
+	RECT rc;
+	GetWindowRect(m_hTabControl, &rc);
+	ScreenToClient(m_hDlg, reinterpret_cast<LPPOINT>(&rc));
+	TabCtrl_AdjustRect(m_hTabControl, FALSE, &rc);
+
+	m_hServicesTab = CreateWindowExW(
+		WS_EX_CONTROLPARENT,
+		L"STATIC",
+		L"",
+		WS_CHILD | WS_TABSTOP,
+		rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+		m_hDlg,
+		reinterpret_cast<HMENU>(IDC_SERVICES_TAB),
+		m_hInstance,
+		nullptr
+	);
+}
+
+void ProcessPropertiesDialog::RefreshPerformanceTab() {
+	// TODO: Populate performance tab with CPU, memory, I/O statistics
+}
+
+void ProcessPropertiesDialog::RefreshEnvironmentTab() {
+	// TODO: Populate environment tab with process environment variables
+}
+
+void ProcessPropertiesDialog::RefreshNetworkTab() {
+	// TODO: Populate network tab with network connections
+}
+
+void ProcessPropertiesDialog::RefreshServicesTab() {
+	// TODO: Populate services tab with related Windows services
+}
+
+void ProcessPropertiesDialog::OnSearchOnline() {
+	if (m_ProcessId == 0) return;
+	
+	std::wstring processName(m_ProcessInfo.ProcessName.begin(), m_ProcessInfo.ProcessName.end());
+	
+	std::wstring encoded;
+	for (wchar_t c : processName) {
+		if ((c >= L'0' && c <= L'9') || (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || c == L'.' || c == L'-' || c == L'_') {
+			encoded += c;
+		} else if (c == L' ') {
+			encoded += L"+";
+		} else {
+			wchar_t buf[4];
+			swprintf_s(buf, L"%%%02X", static_cast<unsigned int>(c));
+			encoded += buf;
+		}
+	}
+	
+	std::wstring query = L"https://www.google.com/search?q=" + encoded + L"+process";
+	ShellExecuteW(nullptr, L"open", query.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }

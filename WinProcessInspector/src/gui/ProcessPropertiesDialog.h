@@ -30,11 +30,15 @@ namespace GUI {
 		bool CreateDialogWindow();
 		bool CreateTabs();
 		void CreateGeneralTab();
+		void CreatePerformanceTab();
 		void CreateThreadsTab();
 		void CreateModulesTab();
 		void CreateMemoryTab();
 		void CreateHandlesTab();
 		void CreateSecurityTab();
+		void CreateEnvironmentTab();
+		void CreateNetworkTab();
+		void CreateServicesTab();
 
 		// Message handling
 		static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -49,22 +53,31 @@ namespace GUI {
 		void OnTabChanged(int tabIndex);
 		void RefreshCurrentTab();
 		void RefreshGeneralTab();
+		void RefreshPerformanceTab();
 		void RefreshThreadsTab();
 		void RefreshModulesTab();
 		void RefreshMemoryTab();
 		void RefreshHandlesTab();
 		void RefreshSecurityTab();
+		void RefreshEnvironmentTab();
+		void RefreshNetworkTab();
+		void RefreshServicesTab();
+		void OnSearchOnline();
 
 		HWND m_hDlg;
 		HWND m_hParent;
 		HINSTANCE m_hInstance;
 		HWND m_hTabControl;
 		HWND m_hGeneralTab;
+		HWND m_hPerformanceTab;
 		HWND m_hThreadsTab;
 		HWND m_hModulesTab;
 		HWND m_hMemoryTab;
 		HWND m_hHandlesTab;
 		HWND m_hSecurityTab;
+		HWND m_hEnvironmentTab;
+		HWND m_hNetworkTab;
+		HWND m_hServicesTab;
 
 		HWND m_hThreadListView;
 		HWND m_hModuleListView;

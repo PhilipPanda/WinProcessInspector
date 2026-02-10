@@ -61,6 +61,7 @@ MainWindow::MainWindow(HINSTANCE hInstance)
 	, m_RefreshTimerId(0)
 	, m_IsRefreshing(false)
 	, m_LastRefreshTime(0)
+	, m_LastCpuUpdateTime(0)
 	, m_hProcessIconList(nullptr)
 	, m_DefaultIconIndex(-1)
 {
@@ -335,6 +336,26 @@ bool MainWindow::CreateMenuBar() {
 	AppendMenuW(hFileMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hFileMenu, MF_STRING, IDM_FILE_EXIT, L"E&xit");
 
+	HMENU hProcessMenu = CreatePopupMenu();
+	if (!hProcessMenu) {
+		DWORD error = GetLastError();
+		std::wostringstream oss;
+		oss << L"Failed to create Process menu. Error: " << error;
+		MessageBoxW(m_hWnd, oss.str().c_str(), L"Initialization Warning", MB_OK | MB_ICONWARNING);
+		Logger::GetInstance().LogWarning("Failed to create Process menu. Error: " + std::to_string(error));
+		return false;
+	}
+	AppendMenuW(hProcessMenu, MF_STRING, IDM_PROCESS_PROPERTIES, L"&Properties");
+	AppendMenuW(hProcessMenu, MF_SEPARATOR, 0, nullptr);
+	AppendMenuW(hProcessMenu, MF_STRING, IDM_PROCESS_SUSPEND, L"&Suspend Process");
+	AppendMenuW(hProcessMenu, MF_STRING, IDM_PROCESS_RESUME, L"&Resume Process");
+	AppendMenuW(hProcessMenu, MF_STRING, IDM_PROCESS_TERMINATE, L"&Terminate Process");
+	AppendMenuW(hProcessMenu, MF_SEPARATOR, 0, nullptr);
+	AppendMenuW(hProcessMenu, MF_STRING, IDM_PROCESS_INJECT_DLL, L"Inject &DLL...");
+	AppendMenuW(hProcessMenu, MF_SEPARATOR, 0, nullptr);
+	AppendMenuW(hProcessMenu, MF_STRING, IDM_PROCESS_FILE_LOCATION, L"Open File &Location");
+	AppendMenuW(hProcessMenu, MF_STRING, IDM_PROCESS_SEARCH_ONLINE, L"Search &Online");
+
 	HMENU hViewMenu = CreatePopupMenu();
 	if (!hViewMenu) {
 		DWORD error = GetLastError();
@@ -358,6 +379,7 @@ bool MainWindow::CreateMenuBar() {
 	AppendMenuW(hHelpMenu, MF_STRING, IDM_HELP_ABOUT, L"&About...");
 
 	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hFileMenu), L"&File");
+	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hProcessMenu), L"&Process");
 	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hViewMenu), L"&View");
 	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hHelpMenu), L"&Help");
 
@@ -399,6 +421,8 @@ bool MainWindow::CreateMenuBar() {
 		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_COPY_PID, L"Copy &PID");
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_COPY_NAME, L"Copy &Name");
+		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
+		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_SEARCH_ONLINE, L"Search &Online");
 	}
 
 	return true;
@@ -435,7 +459,6 @@ bool MainWindow::CreateProcessListView() {
 		return false;
 	}
 
-	// Set extended styles
 	ListView_SetExtendedListViewStyle(m_hProcessListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
 
 	// Create icon image list for process icons (DPI-aware)
@@ -840,6 +863,55 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam) {
 		case IDM_FILE_EXIT:
 			PostMessage(m_hWnd, WM_CLOSE, 0, 0);
 			break;
+		case IDM_PROCESS_PROPERTIES:
+			if (m_SelectedProcessId) {
+				ShowProcessProperties(m_SelectedProcessId);
+			} else {
+				MessageBoxW(m_hWnd, L"Please select a process first.", L"Process", MB_OK | MB_ICONINFORMATION);
+			}
+			break;
+		case IDM_PROCESS_SUSPEND:
+			if (m_SelectedProcessId) {
+				SuspendProcess(m_SelectedProcessId);
+			} else {
+				MessageBoxW(m_hWnd, L"Please select a process first.", L"Suspend Process", MB_OK | MB_ICONINFORMATION);
+			}
+			break;
+		case IDM_PROCESS_RESUME:
+			if (m_SelectedProcessId) {
+				ResumeProcess(m_SelectedProcessId);
+			} else {
+				MessageBoxW(m_hWnd, L"Please select a process first.", L"Resume Process", MB_OK | MB_ICONINFORMATION);
+			}
+			break;
+		case IDM_PROCESS_TERMINATE:
+			if (m_SelectedProcessId) {
+				TerminateProcess(m_SelectedProcessId);
+			} else {
+				MessageBoxW(m_hWnd, L"Please select a process first.", L"Terminate Process", MB_OK | MB_ICONINFORMATION);
+			}
+			break;
+		case IDM_PROCESS_INJECT_DLL:
+			if (m_SelectedProcessId) {
+				InjectDll(m_SelectedProcessId);
+			} else {
+				MessageBoxW(m_hWnd, L"Please select a process first.", L"Inject DLL", MB_OK | MB_ICONINFORMATION);
+			}
+			break;
+		case IDM_PROCESS_FILE_LOCATION:
+			if (m_SelectedProcessId) {
+				OpenProcessFileLocation(m_SelectedProcessId);
+			} else {
+				MessageBoxW(m_hWnd, L"Please select a process first.", L"Open File Location", MB_OK | MB_ICONINFORMATION);
+			}
+			break;
+		case IDM_PROCESS_SEARCH_ONLINE:
+			if (m_SelectedProcessId) {
+				SearchProcessOnline(m_SelectedProcessId);
+			} else {
+				MessageBoxW(m_hWnd, L"Please select a process first.", L"Search Online", MB_OK | MB_ICONINFORMATION);
+			}
+			break;
 		case IDM_VIEW_AUTOREFRESH:
 			OnViewAutoRefresh();
 			break;
@@ -897,6 +969,11 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam) {
 				ResumeProcess(m_SelectedProcessId);
 			}
 			break;
+		case IDM_CONTEXT_SEARCH_ONLINE:
+			if (m_SelectedProcessId) {
+				SearchProcessOnline(m_SelectedProcessId);
+			}
+			break;
 		default:
 			break;
 	}
@@ -907,7 +984,39 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam) {
 	NMHDR* pnmh = reinterpret_cast<NMHDR*>(lParam);
 	
 	if (pnmh->idFrom == IDC_PROCESS_LIST) {
-		if (pnmh->code == NM_DBLCLK) {
+		if (pnmh->code == NM_CUSTOMDRAW) {
+			NMLVCUSTOMDRAW* pcd = reinterpret_cast<NMLVCUSTOMDRAW*>(lParam);
+			
+			switch (pcd->nmcd.dwDrawStage) {
+				case CDDS_PREPAINT:
+					return CDRF_NOTIFYITEMDRAW;
+					
+				case CDDS_ITEMPREPAINT:
+				{
+					LVITEMW lvi = {};
+					lvi.iItem = static_cast<int>(pcd->nmcd.dwItemSpec);
+					lvi.mask = LVIF_PARAM;
+					ListView_GetItem(m_hProcessListView, &lvi);
+					DWORD processId = static_cast<DWORD>(lvi.lParam);
+					
+					double cpuUsage = GetCpuUsage(processId);
+					
+					if (cpuUsage >= 50.0) {
+						pcd->clrText = RGB(255, 255, 255);
+						pcd->clrTextBk = RGB(200, 0, 0);
+					} else if (cpuUsage >= 25.0) {
+						pcd->clrText = RGB(0, 0, 0);
+						pcd->clrTextBk = RGB(255, 255, 0);
+					} else if (cpuUsage >= 5.0) {
+						pcd->clrText = RGB(0, 0, 0);
+						pcd->clrTextBk = RGB(144, 238, 144);
+					}
+					
+					return CDRF_DODEFAULT;
+				}
+			}
+			return CDRF_DODEFAULT;
+		} else if (pnmh->code == NM_DBLCLK) {
 			OnProcessListDoubleClick();
 		} else if (pnmh->code == LVN_ITEMCHANGED) {
 			OnProcessListSelectionChanged();
@@ -1031,8 +1140,8 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
 					m_Processes = std::move(*processes);
 					delete processes;
 					
-					UpdateProcessList();
-					
+					CalculateCpuUsage();
+					UpdateMemoryUsage();
 					UpdateProcessList();
 					
 					std::wostringstream oss;
@@ -1325,7 +1434,10 @@ void MainWindow::UpdateProcessList() {
 		ListView_SetItemText(m_hProcessListView, i, COL_ARCHITECTURE, const_cast<LPWSTR>(archWStr.c_str()));
 
 		// CPU Usage
-		std::wstring cpuStr = L"0%"; // TODO: Calculate actual CPU usage
+		double cpuPercent = GetCpuUsage(proc.ProcessId);
+		std::wostringstream cpuStream;
+		cpuStream << std::fixed << std::setprecision(1) << cpuPercent << L"%";
+		std::wstring cpuStr = cpuStream.str();
 		ListView_SetItemText(m_hProcessListView, i, COL_CPU, const_cast<LPWSTR>(cpuStr.c_str()));
 
 		// Private Memory
@@ -1348,7 +1460,6 @@ void MainWindow::SortProcessList(int column, bool ascending) {
 	m_SortColumn = column;
 	m_SortAscending = ascending;
 
-	// Simple sort implementation
 	auto& listToSort = m_FilterText.empty() ? m_Processes : m_FilteredProcesses;
 	std::sort(listToSort.begin(), listToSort.end(), [this, column, ascending](const ProcessInfo& a, const ProcessInfo& b) {
 		bool result = false;
@@ -1390,7 +1501,6 @@ void MainWindow::SortProcessList(int column, bool ascending) {
 				break;
 			case COL_DESCRIPTION:
 			case COL_IMAGEPATH:
-				// Sort by name for these columns (would need ProcessManager enhancement for actual values)
 				result = a.ProcessName < b.ProcessName;
 				break;
 			default:
@@ -1432,7 +1542,6 @@ void MainWindow::ShowProcessContextMenu(int x, int y) {
 
 	POINT pt = { x, y };
 	if (pt.x == -1 && pt.y == -1) {
-		// Keyboard context menu
 		int sel = ListView_GetNextItem(m_hProcessListView, -1, LVNI_SELECTED);
 		if (sel >= 0) {
 			RECT rc;
@@ -1451,7 +1560,216 @@ void MainWindow::OnFileRefresh() {
 }
 
 void MainWindow::OnFileExport() {
-	MessageBoxW(m_hWnd, L"Export functionality not yet implemented", L"WinProcessInspector", MB_OK | MB_ICONINFORMATION);
+	BuildProcessHierarchy();
+	
+	OPENFILENAMEW ofn = {};
+	wchar_t szFile[260] = {};
+	wcscpy_s(szFile, L"processes.csv");
+	
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = m_hWnd;
+	ofn.lpstrFile = szFile;
+	ofn.nMaxFile = sizeof(szFile) / sizeof(szFile[0]);
+	ofn.lpstrFilter = L"CSV Files\0*.csv\0JSON Files\0*.json\0Text Files\0*.txt\0All Files\0*.*\0";
+	ofn.nFilterIndex = 1;
+	ofn.lpstrFileTitle = nullptr;
+	ofn.nMaxFileTitle = 0;
+	ofn.lpstrInitialDir = nullptr;
+	ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
+
+	if (!GetSaveFileNameW(&ofn)) {
+		return; // User cancelled
+	}
+
+	std::wstring filePath(szFile);
+	std::wstring extension = filePath.substr(filePath.find_last_of(L".") + 1);
+	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
+
+	bool success = false;
+	if (extension == L"csv") {
+		success = ExportToCSV(filePath);
+	} else if (extension == L"json") {
+		success = ExportToJSON(filePath);
+	} else {
+		success = ExportToText(filePath);
+	}
+
+	if (success) {
+		std::wostringstream oss;
+		oss << L"Process list exported successfully to:\n" << filePath;
+		MessageBoxW(m_hWnd, oss.str().c_str(), L"Export Successful", MB_OK | MB_ICONINFORMATION);
+		Logger::GetInstance().LogInfo("Exported process list to: " + std::string(filePath.begin(), filePath.end()));
+	} else {
+		MessageBoxW(m_hWnd, L"Failed to export process list.", L"Export Failed", MB_OK | MB_ICONERROR);
+		Logger::GetInstance().LogError("Failed to export process list to: " + std::string(filePath.begin(), filePath.end()));
+	}
+}
+
+bool MainWindow::ExportToCSV(const std::wstring& filePath) {
+	FILE* file = nullptr;
+	if (_wfopen_s(&file, filePath.c_str(), L"w,ccs=UTF-8") != 0 || !file) {
+		return false;
+	}
+
+	fprintf(file, "\xEF\xBB\xBF");
+	fprintf(file, "Name,PID,Parent PID,CPU%%,Memory,Session,Integrity,User,Architecture,Description,Image Path\n");
+
+	for (const auto& proc : m_FilteredProcesses) {
+		std::wstring name(proc.ProcessName.begin(), proc.ProcessName.end());
+		std::wstring user = proc.UserName.empty() ? L"N/A" : proc.UserName;
+		std::wstring integrity = FormatIntegrityLevel(proc.IntegrityLevel);
+		std::wstring arch(proc.Architecture.begin(), proc.Architecture.end());
+		
+		std::wstring imagePath = GetProcessImagePath(proc.ProcessId);
+		std::wstring description = L"N/A";
+		
+		double cpuUsage = GetCpuUsage(proc.ProcessId);
+		SIZE_T memory = 0;
+		auto memIt = m_ProcessMemory.find(proc.ProcessId);
+		if (memIt != m_ProcessMemory.end()) {
+			memory = memIt->second;
+		}
+
+		auto escapeCSV = [](const std::wstring& str) -> std::wstring {
+			if (str.find(L",") != std::wstring::npos || str.find(L"\"") != std::wstring::npos || str.find(L"\n") != std::wstring::npos) {
+				std::wstring escaped = L"\"";
+				for (wchar_t c : str) {
+					if (c == L'"') escaped += L"\"\"";
+					else escaped += c;
+				}
+				escaped += L"\"";
+				return escaped;
+			}
+			return str;
+		};
+
+		fprintf(file, "%ls,%u,%u,%.2f,%llu,%u,%ls,%ls,%ls,%ls,%ls\n",
+			escapeCSV(name).c_str(),
+			proc.ProcessId,
+			proc.ParentProcessId,
+			cpuUsage,
+			static_cast<unsigned long long>(memory),
+			proc.SessionId,
+			escapeCSV(integrity).c_str(),
+			escapeCSV(user).c_str(),
+			escapeCSV(arch).c_str(),
+			escapeCSV(description).c_str(),
+			escapeCSV(imagePath).c_str()
+		);
+	}
+
+	fclose(file);
+	return true;
+}
+
+bool MainWindow::ExportToJSON(const std::wstring& filePath) {
+	FILE* file = nullptr;
+	if (_wfopen_s(&file, filePath.c_str(), L"w,ccs=UTF-8") != 0 || !file) {
+		return false;
+	}
+
+	fprintf(file, "{\n  \"processes\": [\n");
+
+	for (size_t i = 0; i < m_FilteredProcesses.size(); ++i) {
+		const auto& proc = m_FilteredProcesses[i];
+		std::wstring name(proc.ProcessName.begin(), proc.ProcessName.end());
+		std::wstring user = proc.UserName.empty() ? L"N/A" : proc.UserName;
+		std::wstring integrity = FormatIntegrityLevel(proc.IntegrityLevel);
+		std::wstring arch(proc.Architecture.begin(), proc.Architecture.end());
+		
+		std::wstring imagePath = GetProcessImagePath(proc.ProcessId);
+		std::wstring description = L"N/A";
+		
+		double cpuUsage = GetCpuUsage(proc.ProcessId);
+		SIZE_T memory = 0;
+		auto memIt = m_ProcessMemory.find(proc.ProcessId);
+		if (memIt != m_ProcessMemory.end()) {
+			memory = memIt->second;
+		}
+
+		auto escapeJSON = [](const std::wstring& str) -> std::wstring {
+			std::wstring escaped;
+			for (wchar_t c : str) {
+				if (c == L'"') escaped += L"\\\"";
+				else if (c == L'\\') escaped += L"\\\\";
+				else if (c == L'\n') escaped += L"\\n";
+				else if (c == L'\r') escaped += L"\\r";
+				else if (c == L'\t') escaped += L"\\t";
+				else escaped += c;
+			}
+			return escaped;
+		};
+
+		fprintf(file, "    {\n");
+		fprintf(file, "      \"name\": \"%ls\",\n", escapeJSON(name).c_str());
+		fprintf(file, "      \"pid\": %u,\n", proc.ProcessId);
+		fprintf(file, "      \"parentPid\": %u,\n", proc.ParentProcessId);
+		fprintf(file, "      \"cpuUsage\": %.2f,\n", cpuUsage);
+		fprintf(file, "      \"memory\": %llu,\n", static_cast<unsigned long long>(memory));
+		fprintf(file, "      \"sessionId\": %u,\n", proc.SessionId);
+		fprintf(file, "      \"integrity\": \"%ls\",\n", escapeJSON(integrity).c_str());
+		fprintf(file, "      \"user\": \"%ls\",\n", escapeJSON(user).c_str());
+		fprintf(file, "      \"architecture\": \"%ls\",\n", escapeJSON(arch).c_str());
+		fprintf(file, "      \"description\": \"%ls\",\n", escapeJSON(description).c_str());
+		fprintf(file, "      \"imagePath\": \"%ls\"\n", escapeJSON(imagePath).c_str());
+		fprintf(file, "    }%s\n", (i < m_FilteredProcesses.size() - 1) ? "," : "");
+	}
+
+	fprintf(file, "  ]\n}\n");
+	fclose(file);
+	return true;
+}
+
+bool MainWindow::ExportToText(const std::wstring& filePath) {
+	FILE* file = nullptr;
+	if (_wfopen_s(&file, filePath.c_str(), L"w,ccs=UTF-8") != 0 || !file) {
+		return false;
+	}
+
+	fwprintf(file, L"WinProcessInspector - Process List Export\n");
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	FILETIME ft;
+	SystemTimeToFileTime(&st, &ft);
+	fwprintf(file, L"Generated: %ls\n", FormatTime(ft).c_str());
+	fwprintf(file, L"Total Processes: %zu\n\n", m_FilteredProcesses.size());
+	fwprintf(file, L"%-30s %8s %8s %8s %12s %8s %15s %-20s %12s %-30s %s\n",
+		L"Name", L"PID", L"PPID", L"CPU%", L"Memory", L"Session", L"Integrity", L"User", L"Architecture", L"Description", L"Image Path");
+	fwprintf(file, L"%s\n", std::wstring(150, L'-').c_str());
+
+	for (const auto& proc : m_FilteredProcesses) {
+		std::wstring name(proc.ProcessName.begin(), proc.ProcessName.end());
+		std::wstring user = proc.UserName.empty() ? L"N/A" : proc.UserName;
+		std::wstring integrity = FormatIntegrityLevel(proc.IntegrityLevel);
+		std::wstring arch(proc.Architecture.begin(), proc.Architecture.end());
+		
+		std::wstring imagePath = GetProcessImagePath(proc.ProcessId);
+		std::wstring description = L"N/A";
+		
+		double cpuUsage = GetCpuUsage(proc.ProcessId);
+		SIZE_T memory = 0;
+		auto memIt = m_ProcessMemory.find(proc.ProcessId);
+		if (memIt != m_ProcessMemory.end()) {
+			memory = memIt->second;
+		}
+
+		fwprintf(file, L"%-30s %8u %8u %7.2f%% %12llu %8u %15s %-20s %12s %-30s %s\n",
+			name.c_str(),
+			proc.ProcessId,
+			proc.ParentProcessId,
+			cpuUsage,
+			static_cast<unsigned long long>(memory),
+			proc.SessionId,
+			integrity.c_str(),
+			user.c_str(),
+			arch.c_str(),
+			description.c_str(),
+			imagePath.c_str()
+		);
+	}
+
+	fclose(file);
+	return true;
 }
 
 void MainWindow::OnViewAutoRefresh() {
@@ -1492,10 +1810,15 @@ void MainWindow::OnHelpAbout() {
 }
 
 void MainWindow::ShowProcessProperties(DWORD processId) {
-	if (!m_PropertiesDialog) {
-		m_PropertiesDialog = std::make_unique<ProcessPropertiesDialog>(m_hInstance, m_hWnd);
+	std::wstring imagePath = GetProcessImagePath(processId);
+	if (!imagePath.empty()) {
+		ShellExecuteW(m_hWnd, L"properties", imagePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	} else {
+		if (!m_PropertiesDialog) {
+			m_PropertiesDialog = std::make_unique<ProcessPropertiesDialog>(m_hInstance, m_hWnd);
+		}
+		m_PropertiesDialog->Show(processId);
 	}
-	m_PropertiesDialog->Show(processId);
 }
 
 bool MainWindow::ValidateProcess(DWORD processId, std::wstring& errorMsg) {
@@ -1727,30 +2050,58 @@ void MainWindow::InjectDll(DWORD processId) {
 		return;
 	}
 
-	// Try injection methods in order of reliability
+	// Let user select injection method
+	int selectedMethod = SelectInjectionMethod(processId);
+	if (selectedMethod == -1) {
+		return; // User cancelled
+	}
+
 	using namespace WinProcessInspector::Injection;
 	bool success = false;
 	std::wstring methodUsed;
 
-	if (InjectViaCreateRemoteThread(&ansiPath[0], hProcess.Get())) {
-		success = true;
-		methodUsed = L"CreateRemoteThread";
-	} else if (InjectViaNtCreateThreadEx(&ansiPath[0], hProcess.Get())) {
-		success = true;
-		methodUsed = L"NtCreateThreadEx";
-	} else if (InjectViaRtlCreateUserThread(hProcess.Get(), &ansiPath[0])) {
-		success = true;
-		methodUsed = L"RtlCreateUserThread";
-	} else if (InjectViaQueueUserAPC(&ansiPath[0], hProcess.Get(), processId)) {
-		success = true;
-		methodUsed = L"QueueUserAPC";
+	switch (selectedMethod) {
+		case 0: // CreateRemoteThread
+			if (InjectViaCreateRemoteThread(&ansiPath[0], hProcess.Get())) {
+				success = true;
+				methodUsed = L"CreateRemoteThread";
+			}
+			break;
+		case 1: // NtCreateThreadEx
+			if (InjectViaNtCreateThreadEx(&ansiPath[0], hProcess.Get())) {
+				success = true;
+				methodUsed = L"NtCreateThreadEx";
+			}
+			break;
+		case 2: // RtlCreateUserThread
+			if (InjectViaRtlCreateUserThread(hProcess.Get(), &ansiPath[0])) {
+				success = true;
+				methodUsed = L"RtlCreateUserThread";
+			}
+			break;
+		case 3: // QueueUserAPC
+			if (InjectViaQueueUserAPC(&ansiPath[0], hProcess.Get(), processId)) {
+				success = true;
+				methodUsed = L"QueueUserAPC";
+			}
+			break;
+		case 4: // SetWindowsHookEx
+			if (InjectViaSetWindowsHookEx(processId, &ansiPath[0])) {
+				success = true;
+				methodUsed = L"SetWindowsHookEx";
+			}
+			break;
+		default:
+			MessageBoxW(m_hWnd, L"Invalid injection method selected.", L"Inject DLL", MB_OK | MB_ICONERROR);
+			return;
 	}
 
 	if (success) {
 		std::wostringstream oss;
 		oss << L"DLL injected successfully using " << methodUsed << L" method.";
 		MessageBoxW(m_hWnd, oss.str().c_str(), L"Inject DLL", MB_OK | MB_ICONINFORMATION);
-		Logger::GetInstance().LogInfo("Injected DLL into process PID " + std::to_string(processId) + " using " + std::string(methodUsed.begin(), methodUsed.end()));
+		std::string methodUsedA(methodUsed.begin(), methodUsed.end());
+		Logger::GetInstance().LogInfo("Injected DLL into process PID " + std::to_string(processId) + " using " + methodUsedA);
 		RefreshProcessList();
 	} else {
 		MessageBoxW(m_hWnd, L"Failed to inject DLL. All injection methods failed.\n\nThe process may be protected or incompatible.", L"Inject DLL", MB_OK | MB_ICONERROR);
@@ -1858,4 +2209,257 @@ std::wstring MainWindow::FormatTime(const FILETIME& ft) {
 		return oss.str();
 	}
 	return L"N/A";
+}
+
+void MainWindow::CalculateCpuUsage() {
+	DWORD currentTime = GetTickCount();
+	DWORD timeDelta = 0;
+	
+	if (m_LastCpuUpdateTime > 0) {
+		timeDelta = currentTime - m_LastCpuUpdateTime;
+		if (timeDelta < 500) {
+			return;
+		}
+	}
+	
+	FILETIME idleTime, kernelTime, userTime;
+	if (!GetSystemTimes(&idleTime, &kernelTime, &userTime)) {
+		return;
+	}
+	
+	for (const auto& proc : m_Processes) {
+		HandleWrapper hProcess = m_ProcessManager.OpenProcess(proc.ProcessId, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
+		if (!hProcess.IsValid()) {
+			m_ProcessCpuPercent[proc.ProcessId] = 0.0;
+			continue;
+		}
+		
+		FILETIME creationTime, exitTime, kernelTimeProc, userTimeProc;
+		if (!GetProcessTimes(hProcess.Get(), &creationTime, &exitTime, &kernelTimeProc, &userTimeProc)) {
+			m_ProcessCpuPercent[proc.ProcessId] = 0.0;
+			continue;
+		}
+		
+		ULONGLONG processTime = ((ULONGLONG)kernelTimeProc.dwHighDateTime << 32) | kernelTimeProc.dwLowDateTime;
+		processTime += ((ULONGLONG)userTimeProc.dwHighDateTime << 32) | userTimeProc.dwLowDateTime;
+		
+		if (m_ProcessCpuTimePrev.find(proc.ProcessId) != m_ProcessCpuTimePrev.end()) {
+			ULONGLONG prevTime = m_ProcessCpuTimePrev[proc.ProcessId];
+			ULONGLONG deltaTime = processTime - prevTime;
+			
+			if (timeDelta > 0) {
+				double cpuPercent = (static_cast<double>(deltaTime) / static_cast<double>(timeDelta * 10000)) * 100.0;
+				if (cpuPercent > 100.0) cpuPercent = 100.0;
+				m_ProcessCpuPercent[proc.ProcessId] = cpuPercent;
+			} else {
+				m_ProcessCpuPercent[proc.ProcessId] = 0.0;
+			}
+		} else {
+			m_ProcessCpuPercent[proc.ProcessId] = 0.0;
+		}
+		
+		m_ProcessCpuTimePrev[proc.ProcessId] = static_cast<DWORD>(processTime & 0xFFFFFFFF);
+	}
+	
+	m_LastCpuUpdateTime = currentTime;
+}
+
+void MainWindow::UpdateMemoryUsage() {
+	for (const auto& proc : m_Processes) {
+		HandleWrapper hProcess = m_ProcessManager.OpenProcess(proc.ProcessId, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
+		if (!hProcess.IsValid()) {
+			m_ProcessMemory[proc.ProcessId] = 0;
+			continue;
+		}
+		
+		PROCESS_MEMORY_COUNTERS_EX pmc = {};
+		if (GetProcessMemoryInfo(hProcess.Get(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
+			m_ProcessMemory[proc.ProcessId] = pmc.PrivateUsage;
+		} else {
+			m_ProcessMemory[proc.ProcessId] = 0;
+		}
+	}
+}
+
+double MainWindow::GetCpuUsage(DWORD processId) const {
+	auto it = m_ProcessCpuPercent.find(processId);
+	if (it != m_ProcessCpuPercent.end()) {
+		return it->second;
+	}
+	return 0.0;
+}
+
+static struct InjectionDialogData {
+	int* pSelectedMethod;
+	bool* pDone;
+	HWND hDesc;
+} g_InjectionDialogData;
+
+static LRESULT CALLBACK InjectionMethodDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	if (uMsg == WM_COMMAND) {
+		if (LOWORD(wParam) == IDC_INJECTION_METHOD_LIST && HIWORD(wParam) == LBN_SELCHANGE) {
+			HWND hList = GetDlgItem(hDlg, IDC_INJECTION_METHOD_LIST);
+			int sel = static_cast<int>(SendMessage(hList, LB_GETCURSEL, 0, 0));
+			const wchar_t* descs[] = {
+				L"Standard Windows API. Most compatible but easily detected by security software.",
+				L"Native API method. More stealthy, bypasses some hooks. Requires ntdll.dll.",
+				L"Low-level NT API. Very stealthy but may fail on protected processes.",
+				L"Uses Asynchronous Procedure Calls. Works on alertable threads only.",
+				L"Hook-based injection. Requires hook procedure in DLL. May be detected."
+			};
+			if (sel >= 0 && sel < 5 && g_InjectionDialogData.hDesc) {
+				SetWindowTextW(g_InjectionDialogData.hDesc, descs[sel]);
+			}
+		}
+		if (LOWORD(wParam) == IDC_INJECTION_METHOD_LIST && HIWORD(wParam) == LBN_DBLCLK) {
+			HWND hList = GetDlgItem(hDlg, IDC_INJECTION_METHOD_LIST);
+			if (g_InjectionDialogData.pSelectedMethod) {
+				*g_InjectionDialogData.pSelectedMethod = static_cast<int>(SendMessage(hList, LB_GETCURSEL, 0, 0));
+			}
+			if (g_InjectionDialogData.pDone) *g_InjectionDialogData.pDone = true;
+			DestroyWindow(hDlg);
+			return TRUE;
+		}
+		if (LOWORD(wParam) == IDC_INJECTION_METHOD_OK) {
+			HWND hList = GetDlgItem(hDlg, IDC_INJECTION_METHOD_LIST);
+			if (g_InjectionDialogData.pSelectedMethod) {
+				*g_InjectionDialogData.pSelectedMethod = static_cast<int>(SendMessage(hList, LB_GETCURSEL, 0, 0));
+			}
+			if (g_InjectionDialogData.pDone) *g_InjectionDialogData.pDone = true;
+			DestroyWindow(hDlg);
+			return TRUE;
+		}
+		if (LOWORD(wParam) == IDC_INJECTION_METHOD_CANCEL || LOWORD(wParam) == IDCANCEL) {
+			if (g_InjectionDialogData.pDone) *g_InjectionDialogData.pDone = true;
+			DestroyWindow(hDlg);
+			return TRUE;
+		}
+	}
+	if (uMsg == WM_CLOSE) {
+		if (g_InjectionDialogData.pDone) *g_InjectionDialogData.pDone = true;
+		DestroyWindow(hDlg);
+		return TRUE;
+	}
+	return DefWindowProc(hDlg, uMsg, wParam, lParam);
+}
+
+int MainWindow::SelectInjectionMethod(DWORD processId) {
+	const wchar_t* methods[] = {
+		L"CreateRemoteThread (Standard API)",
+		L"NtCreateThreadEx (Native API)",
+		L"RtlCreateUserThread (Low-level NT)",
+		L"QueueUserAPC (APC-based)",
+		L"SetWindowsHookEx (Hook-based)"
+	};
+
+	WNDCLASSW wc = {};
+	wc.lpfnWndProc = InjectionMethodDialogProc;
+	wc.hInstance = m_hInstance;
+	wc.lpszClassName = L"InjectionMethodDialog";
+	wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+	wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+	RegisterClassW(&wc);
+
+	HWND hDlg = CreateWindowExW(WS_EX_DLGMODALFRAME,
+		L"InjectionMethodDialog",
+		L"Select Injection Method",
+		WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME,
+		CW_USEDEFAULT, CW_USEDEFAULT, 400, 300,
+		m_hWnd, nullptr, m_hInstance, nullptr);
+
+	if (!hDlg) {
+		return 0;
+	}
+
+	HWND hList = CreateWindowExW(WS_EX_CLIENTEDGE,
+		L"LISTBOX",
+		L"",
+		WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY,
+		10, 10, 360, 200,
+		hDlg, reinterpret_cast<HMENU>(IDC_INJECTION_METHOD_LIST), m_hInstance, nullptr);
+
+	HWND hDesc = CreateWindowExW(WS_EX_CLIENTEDGE,
+		L"EDIT",
+		L"",
+		WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
+		10, 220, 360, 30,
+		hDlg, reinterpret_cast<HMENU>(IDC_INJECTION_METHOD_DESCRIPTION), m_hInstance, nullptr);
+
+	HWND hOk = CreateWindowW(L"BUTTON", L"OK",
+		WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
+		200, 260, 75, 25,
+		hDlg, reinterpret_cast<HMENU>(IDC_INJECTION_METHOD_OK), m_hInstance, nullptr);
+
+	HWND hCancel = CreateWindowW(L"BUTTON", L"Cancel",
+		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+		285, 260, 75, 25,
+		hDlg, reinterpret_cast<HMENU>(IDC_INJECTION_METHOD_CANCEL), m_hInstance, nullptr);
+
+	HFONT hFont = reinterpret_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+	if (hFont) {
+		SendMessage(hList, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+		SendMessage(hDesc, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+		SendMessage(hOk, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+		SendMessage(hCancel, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+	}
+
+	for (int i = 0; i < 5; ++i) {
+		SendMessage(hList, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(methods[i]));
+	}
+	SendMessage(hList, LB_SETCURSEL, 0, 0);
+
+	const wchar_t* descs[] = {
+		L"Standard Windows API. Most compatible but easily detected by security software.",
+		L"Native API method. More stealthy, bypasses some hooks. Requires ntdll.dll.",
+		L"Low-level NT API. Very stealthy but may fail on protected processes.",
+		L"Uses Asynchronous Procedure Calls. Works on alertable threads only.",
+		L"Hook-based injection. Requires hook procedure in DLL. May be detected."
+	};
+	SetWindowTextW(hDesc, descs[0]);
+
+	int selectedMethod = -1;
+	bool done = false;
+	g_InjectionDialogData.pSelectedMethod = &selectedMethod;
+	g_InjectionDialogData.pDone = &done;
+	g_InjectionDialogData.hDesc = hDesc;
+
+	ShowWindow(hDlg, SW_SHOW);
+	UpdateWindow(hDlg);
+	SetFocus(hList);
+
+	MSG msg = {};
+	while (!done && GetMessage(&msg, nullptr, 0, 0)) {
+		if (!IsDialogMessage(hDlg, &msg)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+
+	return selectedMethod >= 0 ? selectedMethod : 0;
+}
+
+void MainWindow::SearchProcessOnline(DWORD processId) {
+	ProcessInfo info = m_ProcessManager.GetProcessDetails(processId);
+	if (info.ProcessId == 0) {
+		MessageBoxW(m_hWnd, L"The process no longer exists.", L"Search Online", MB_OK | MB_ICONERROR);
+		return;
+	}
+
+	std::wstring processName(info.ProcessName.begin(), info.ProcessName.end());
+	
+	std::wstring encoded;
+	for (wchar_t c : processName) {
+		if ((c >= L'0' && c <= L'9') || (c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') || c == L'.' || c == L'-' || c == L'_') {
+			encoded += c;
+		} else if (c == L' ') {
+			encoded += L"+";
+		} else {
+			wchar_t buf[4];
+			swprintf_s(buf, L"%%%02X", static_cast<unsigned int>(c));
+			encoded += buf;
+		}
+	}
+	
+	std::wstring query = L"https://www.google.com/search?q=" + encoded + L"+process";
+	ShellExecuteW(nullptr, L"open", query.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
