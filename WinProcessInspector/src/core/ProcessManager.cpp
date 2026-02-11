@@ -33,6 +33,22 @@ typedef NTSTATUS (WINAPI* pNtQuerySystemInformation)(
 #define ThreadQuerySetWin32StartAddress 9
 #define SystemProcessInformation 5
 
+#ifndef NT_SUCCESS
+#define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#endif
+
+typedef struct _UNICODE_STRING32 {
+	USHORT Length;
+	USHORT MaximumLength;
+	ULONG Buffer;
+} UNICODE_STRING32;
+
+typedef struct _UNICODE_STRING64 {
+	USHORT Length;
+	USHORT MaximumLength;
+	ULONGLONG Buffer;
+} UNICODE_STRING64;
+
 namespace WinProcessInspector {
 namespace Core {
 
@@ -62,13 +78,44 @@ std::vector<ProcessInfo> ProcessManager::EnumerateAllProcesses() const {
 			}
 
 			info.Architecture = GetProcessArchitecture(pe32.th32ProcessID);
-
 			info.SessionId = GetProcessSessionId(pe32.th32ProcessID);
-
+			
 			Security::SecurityManager secMgr;
 			info.IntegrityLevel = secMgr.GetProcessIntegrityLevel(pe32.th32ProcessID);
-
+			
 			GetProcessUser(pe32.th32ProcessID, info.UserSid, info.UserName, info.UserDomain);
+			
+			info.CommandLine = GetProcessCommandLine(pe32.th32ProcessID);
+			info.ThreadCount = pe32.cntThreads;
+			
+			FILETIME creationTime, exitTime, kernelTime, userTime;
+			if (GetProcessTimes(pe32.th32ProcessID, creationTime, exitTime, kernelTime, userTime)) {
+				info.CreationTime = creationTime;
+			}
+			
+			DWORD threadCount, handleCount;
+			if (GetProcessCounts(pe32.th32ProcessID, threadCount, handleCount)) {
+				info.HandleCount = handleCount;
+			}
+			
+			GetProcessGdiUserCounts(pe32.th32ProcessID, info.GdiObjectCount, info.UserObjectCount);
+			GetProcessIoCounters(pe32.th32ProcessID, info.ReadOperationCount, info.WriteOperationCount, 
+				info.ReadTransferCount, info.WriteTransferCount);
+			
+			HandleWrapper hProc = OpenProcess(pe32.th32ProcessID, PROCESS_QUERY_INFORMATION);
+			if (hProc.IsValid()) {
+				PROCESS_MEMORY_COUNTERS_EX pmc = {};
+				pmc.cb = sizeof(pmc);
+				if (GetProcessMemoryInfo(hProc.Get(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
+					info.PeakWorkingSetSize = pmc.PeakWorkingSetSize;
+					info.PageFaultCount = pmc.PageFaultCount;
+				}
+			}
+			
+			GetProcessMitigations(pe32.th32ProcessID, info.DEPEnabled, info.ASLREnabled, info.CFGEnabled);
+			info.IsVirtualized = IsProcessVirtualized(pe32.th32ProcessID);
+			info.IsAppContainer = IsProcessAppContainer(pe32.th32ProcessID);
+			info.IsInJob = IsProcessInJob(pe32.th32ProcessID);
 
 			processes.push_back(info);
 		} while (Process32NextW(hSnap.Get(), &pe32));
@@ -326,6 +373,288 @@ bool ProcessManager::GetThreadState(HANDLE hThread, DWORD& state, DWORD& waitRea
 		}
 		waitReason = 0;
 		return true;
+	}
+
+	return false;
+}
+
+std::wstring ProcessManager::GetProcessCommandLine(DWORD processId) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ);
+	if (!hProcess.IsValid()) {
+		return L"";
+	}
+
+	HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+	if (!hNtdll) {
+		return L"";
+	}
+
+	typedef NTSTATUS (WINAPI* pNtQueryInformationProcess)(
+		HANDLE ProcessHandle,
+		ULONG ProcessInformationClass,
+		PVOID ProcessInformation,
+		ULONG ProcessInformationLength,
+		PULONG ReturnLength
+	);
+
+	pNtQueryInformationProcess NtQueryInformationProcess = 
+		reinterpret_cast<pNtQueryInformationProcess>(GetProcAddress(hNtdll, "NtQueryInformationProcess"));
+	
+	if (!NtQueryInformationProcess) {
+		return L"";
+	}
+
+	PROCESS_BASIC_INFORMATION pbi = {};
+	ULONG returnLength = 0;
+	NTSTATUS status = NtQueryInformationProcess(hProcess.Get(), 0, &pbi, sizeof(pbi), &returnLength);
+	
+	if (!NT_SUCCESS(status) || !pbi.PebBaseAddress) {
+		return L"";
+	}
+
+	BOOL isWow64 = FALSE;
+	IsWow64Process(hProcess.Get(), &isWow64);
+
+#ifdef _WIN64
+	if (isWow64) {
+		ULONG pebAddress32 = 0;
+		status = NtQueryInformationProcess(hProcess.Get(), ProcessWow64Information, &pebAddress32, sizeof(pebAddress32), &returnLength);
+		if (!NT_SUCCESS(status) || pebAddress32 == 0) {
+			return L"";
+		}
+
+		ULONG rtlUserProcParamsAddress32 = 0;
+		SIZE_T bytesRead = 0;
+		if (!ReadProcessMemory(hProcess.Get(), (PVOID)(ULONG_PTR)(pebAddress32 + 0x10), &rtlUserProcParamsAddress32, sizeof(rtlUserProcParamsAddress32), &bytesRead)) {
+			return L"";
+		}
+
+		if (rtlUserProcParamsAddress32 == 0) {
+			return L"";
+		}
+
+		UNICODE_STRING32 commandLine32 = {};
+		if (!ReadProcessMemory(hProcess.Get(), (PVOID)(ULONG_PTR)(rtlUserProcParamsAddress32 + 0x40), &commandLine32, sizeof(commandLine32), &bytesRead)) {
+			return L"";
+		}
+
+		if (commandLine32.Length == 0 || commandLine32.Length > 32768 || commandLine32.Buffer == 0) {
+			return L"";
+		}
+
+		std::vector<WCHAR> buffer(commandLine32.Length / sizeof(WCHAR) + 1);
+		if (!ReadProcessMemory(hProcess.Get(), (PVOID)(ULONG_PTR)commandLine32.Buffer, buffer.data(), commandLine32.Length, &bytesRead)) {
+			return L"";
+		}
+
+		buffer[commandLine32.Length / sizeof(WCHAR)] = L'\0';
+		return std::wstring(buffer.data());
+	}
+#endif
+
+	PVOID rtlUserProcParamsAddress = nullptr;
+	SIZE_T bytesRead = 0;
+	
+	if (!ReadProcessMemory(hProcess.Get(), 
+		(PCHAR)pbi.PebBaseAddress + 0x20,
+		&rtlUserProcParamsAddress, sizeof(rtlUserProcParamsAddress), &bytesRead)) {
+		return L"";
+	}
+
+	if (!rtlUserProcParamsAddress) {
+		return L"";
+	}
+
+	UNICODE_STRING commandLine = {};
+	if (!ReadProcessMemory(hProcess.Get(),
+		(PCHAR)rtlUserProcParamsAddress + 0x70,
+		&commandLine, sizeof(commandLine), &bytesRead)) {
+		return L"";
+	}
+
+	if (commandLine.Length == 0 || commandLine.Length > 32768 || !commandLine.Buffer) {
+		return L"";
+	}
+
+	std::vector<WCHAR> buffer(commandLine.Length / sizeof(WCHAR) + 1);
+	if (!ReadProcessMemory(hProcess.Get(), commandLine.Buffer, buffer.data(), commandLine.Length, &bytesRead)) {
+		return L"";
+	}
+
+	buffer[commandLine.Length / sizeof(WCHAR)] = L'\0';
+	return std::wstring(buffer.data());
+}
+
+bool ProcessManager::GetProcessTimes(DWORD processId, FILETIME& creationTime, FILETIME& exitTime, 
+	FILETIME& kernelTime, FILETIME& userTime) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	return ::GetProcessTimes(hProcess.Get(), &creationTime, &exitTime, &kernelTime, &userTime) != FALSE;
+}
+
+bool ProcessManager::GetProcessCounts(DWORD processId, DWORD& threadCount, DWORD& handleCount) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	DWORD handleCountLocal = 0;
+	if (::GetProcessHandleCount(hProcess.Get(), &handleCountLocal)) {
+		handleCount = handleCountLocal;
+	}
+
+	HandleWrapper hSnap(CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0));
+	if (hSnap.IsValid()) {
+		THREADENTRY32 te32 = {};
+		te32.dwSize = sizeof(THREADENTRY32);
+		
+		threadCount = 0;
+		if (Thread32First(hSnap.Get(), &te32)) {
+			do {
+				if (te32.th32OwnerProcessID == processId) {
+					threadCount++;
+				}
+			} while (Thread32Next(hSnap.Get(), &te32));
+		}
+	}
+
+	return true;
+}
+
+bool ProcessManager::GetProcessGdiUserCounts(DWORD processId, DWORD& gdiCount, DWORD& userCount) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	gdiCount = GetGuiResources(hProcess.Get(), GR_GDIOBJECTS);
+	userCount = GetGuiResources(hProcess.Get(), GR_USEROBJECTS);
+	
+	return (gdiCount > 0 || userCount > 0);
+}
+
+bool ProcessManager::GetProcessIoCounters(DWORD processId, ULONGLONG& readOps, ULONGLONG& writeOps, 
+	ULONGLONG& readBytes, ULONGLONG& writeBytes) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	IO_COUNTERS ioCounters = {};
+	if (!::GetProcessIoCounters(hProcess.Get(), &ioCounters)) {
+		return false;
+	}
+
+	readOps = ioCounters.ReadOperationCount;
+	writeOps = ioCounters.WriteOperationCount;
+	readBytes = ioCounters.ReadTransferCount;
+	writeBytes = ioCounters.WriteTransferCount;
+
+	return true;
+}
+
+bool ProcessManager::GetProcessMitigations(DWORD processId, bool& depEnabled, bool& aslrEnabled, bool& cfgEnabled) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	PROCESS_MITIGATION_DEP_POLICY depPolicy = {};
+	PROCESS_MITIGATION_ASLR_POLICY aslrPolicy = {};
+	PROCESS_MITIGATION_CONTROL_FLOW_GUARD_POLICY cfgPolicy = {};
+
+	typedef BOOL (WINAPI* pGetProcessMitigationPolicy)(
+		HANDLE hProcess,
+		DWORD MitigationPolicy,
+		PVOID lpBuffer,
+		SIZE_T dwLength
+	);
+
+	HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
+	if (!hKernel32) {
+		return false;
+	}
+
+	pGetProcessMitigationPolicy GetProcessMitigationPolicy =
+		reinterpret_cast<pGetProcessMitigationPolicy>(GetProcAddress(hKernel32, "GetProcessMitigationPolicy"));
+
+	if (!GetProcessMitigationPolicy) {
+		return false;
+	}
+
+	if (GetProcessMitigationPolicy(hProcess.Get(), 0, &depPolicy, sizeof(depPolicy))) {
+		depEnabled = depPolicy.Enable != 0;
+	}
+
+	if (GetProcessMitigationPolicy(hProcess.Get(), 1, &aslrPolicy, sizeof(aslrPolicy))) {
+		aslrEnabled = aslrPolicy.EnableBottomUpRandomization != 0 || aslrPolicy.EnableForceRelocateImages != 0;
+	}
+
+	if (GetProcessMitigationPolicy(hProcess.Get(), 7, &cfgPolicy, sizeof(cfgPolicy))) {
+		cfgEnabled = cfgPolicy.EnableControlFlowGuard != 0;
+	}
+
+	return true;
+}
+
+bool ProcessManager::IsProcessVirtualized(DWORD processId) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	HANDLE hToken = nullptr;
+	if (!OpenProcessToken(hProcess.Get(), TOKEN_QUERY, &hToken)) {
+		return false;
+	}
+
+	DWORD virtualized = 0;
+	DWORD returnLength = 0;
+	bool result = false;
+
+	if (GetTokenInformation(hToken, static_cast<TOKEN_INFORMATION_CLASS>(24), &virtualized, sizeof(virtualized), &returnLength)) {
+		result = (virtualized != 0);
+	}
+
+	CloseHandle(hToken);
+	return result;
+}
+
+bool ProcessManager::IsProcessAppContainer(DWORD processId) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	HANDLE hToken = nullptr;
+	if (!OpenProcessToken(hProcess.Get(), TOKEN_QUERY, &hToken)) {
+		return false;
+	}
+
+	DWORD isAppContainer = 0;
+	DWORD returnLength = 0;
+	bool result = false;
+
+	if (GetTokenInformation(hToken, static_cast<TOKEN_INFORMATION_CLASS>(29), &isAppContainer, sizeof(isAppContainer), &returnLength)) {
+		result = (isAppContainer != 0);
+	}
+
+	CloseHandle(hToken);
+	return result;
+}
+
+bool ProcessManager::IsProcessInJob(DWORD processId) const {
+	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION);
+	if (!hProcess.IsValid()) {
+		return false;
+	}
+
+	BOOL isInJob = FALSE;
+	if (::IsProcessInJob(hProcess.Get(), nullptr, &isInJob)) {
+		return isInJob != FALSE;
 	}
 
 	return false;

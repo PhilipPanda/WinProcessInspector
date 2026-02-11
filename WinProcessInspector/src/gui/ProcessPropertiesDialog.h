@@ -35,6 +35,12 @@ namespace GUI {
 		void CreateEnvironmentTab();
 		void CreateNetworkTab();
 		void CreateServicesTab();
+		
+		void AddStaticText(HWND hParent, const wchar_t* text, int x, int y, int width, int height, bool bold = false);
+		void AddEditBox(HWND hParent, const wchar_t* text, int x, int y, int width, int height, bool multiline = false, bool readonly = true);
+		std::wstring FormatFileTime(const FILETIME& ft);
+		std::wstring FormatBytes(ULONGLONG bytes);
+		std::wstring FormatNumber(ULONGLONG number);
 
 		static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 		LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -86,6 +92,9 @@ namespace GUI {
 		WinProcessInspector::Core::MemoryManager m_MemoryManager;
 		WinProcessInspector::Core::HandleManager m_HandleManager;
 		WinProcessInspector::Security::SecurityManager m_SecurityManager;
+		
+		HFONT m_hBoldFont;
+		HFONT m_hNormalFont;
 	};
 
 } // namespace GUI

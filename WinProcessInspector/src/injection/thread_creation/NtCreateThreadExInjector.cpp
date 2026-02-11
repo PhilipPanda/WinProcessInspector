@@ -81,15 +81,22 @@ bool InjectViaNtCreateThreadEx(LPCSTR DllPath, HANDLE hProcess) {
 		return false;
 	}
 
-	WaitForSingleObject(hThread, 5000);
+	DWORD waitResult = WaitForSingleObject(hThread, 5000);
 	
 	DWORD exitCode = 0;
 	GetExitCodeThread(hThread, &exitCode);
 	
 	CloseHandle(hThread);
+	
+	if (waitResult == WAIT_TIMEOUT) {
+		VirtualFreeEx(hProcess, pDllPath, 0, MEM_RELEASE);
+		return false;
+	}
+	
+	Sleep(100);
 	VirtualFreeEx(hProcess, pDllPath, 0, MEM_RELEASE);
 
-	return exitCode != 0;
+	return exitCode != 0 && exitCode != STILL_ACTIVE;
 }
 
 }

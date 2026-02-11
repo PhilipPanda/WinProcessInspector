@@ -80,6 +80,8 @@ namespace GUI {
 		void OnViewSearchBar();
 		void OnViewAutoRefresh();
 		void OnViewColumns();
+		void ShowNetworkConnectionsWindow();
+		void ShowSystemInformationWindow();
 		void ShowColumnChooserDialog();
 		void OnHelpAbout();
 		void OnHelpGitHub();
@@ -95,6 +97,7 @@ namespace GUI {
 		void CopyProcessId(DWORD processId);
 		void CopyProcessName(DWORD processId);
 		void SearchProcessOnline(DWORD processId);
+		void ShowCommandLineDialog(DWORD processId);
 
 		bool ValidateProcess(DWORD processId, std::wstring& errorMsg);
 		bool ValidateProcessAccess(DWORD processId, DWORD desiredAccess, std::wstring& errorMsg);

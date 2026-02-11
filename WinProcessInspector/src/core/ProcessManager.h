@@ -21,6 +21,24 @@ namespace Core {
 		std::wstring UserSid;
 		std::wstring UserName;
 		std::wstring UserDomain;
+		std::wstring CommandLine;
+		FILETIME CreationTime = {};
+		DWORD ThreadCount = 0;
+		DWORD HandleCount = 0;
+		DWORD GdiObjectCount = 0;
+		DWORD UserObjectCount = 0;
+		SIZE_T PeakWorkingSetSize = 0;
+		ULONGLONG ReadOperationCount = 0;
+		ULONGLONG WriteOperationCount = 0;
+		ULONGLONG ReadTransferCount = 0;
+		ULONGLONG WriteTransferCount = 0;
+		DWORD PageFaultCount = 0;
+		bool DEPEnabled = false;
+		bool ASLREnabled = false;
+		bool CFGEnabled = false;
+		bool IsVirtualized = false;
+		bool IsAppContainer = false;
+		bool IsInJob = false;
 	};
 
 	struct ThreadInfo {
@@ -57,6 +75,16 @@ namespace Core {
 		DWORD GetProcessSessionId(DWORD processId) const;
 
 		bool GetProcessUser(DWORD processId, std::wstring& userSid, std::wstring& userName, std::wstring& userDomain) const;
+		
+		std::wstring GetProcessCommandLine(DWORD processId) const;
+		bool GetProcessTimes(DWORD processId, FILETIME& creationTime, FILETIME& exitTime, FILETIME& kernelTime, FILETIME& userTime) const;
+		bool GetProcessCounts(DWORD processId, DWORD& threadCount, DWORD& handleCount) const;
+		bool GetProcessGdiUserCounts(DWORD processId, DWORD& gdiCount, DWORD& userCount) const;
+		bool GetProcessIoCounters(DWORD processId, ULONGLONG& readOps, ULONGLONG& writeOps, ULONGLONG& readBytes, ULONGLONG& writeBytes) const;
+		bool GetProcessMitigations(DWORD processId, bool& depEnabled, bool& aslrEnabled, bool& cfgEnabled) const;
+		bool IsProcessVirtualized(DWORD processId) const;
+		bool IsProcessAppContainer(DWORD processId) const;
+		bool IsProcessInJob(DWORD processId) const;
 
 	private:
 		std::string GetArchitectureFromHandle(HANDLE hProcess) const;

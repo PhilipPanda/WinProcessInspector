@@ -163,9 +163,11 @@
     <ClCompile Include="src\core\ModuleManager.cpp" />
     <ClCompile Include="src\core\MemoryManager.cpp" />
     <ClCompile Include="src\core\HandleManager.cpp" />
+    <ClCompile Include="src\core\NetworkManager.cpp" />
     <ClCompile Include="src\security\SecurityManager.cpp" />
     <ClCompile Include="src\utils\Logger.cpp" />
     <ClCompile Include="src\utils\ErrorHandler.cpp" />
+    <ClCompile Include="src\utils\CryptoHelper.cpp" />
     <ClCompile Include="src\injection\thread_creation\NtCreateThreadExInjector.cpp" />
     <ClCompile Include="src\injection\apc_based\QueueUserAPCInjector.cpp" />
     <ClCompile Include="src\injection\hook_based\SetWindowsHookExInjector.cpp" />
@@ -186,11 +188,13 @@
     <ClInclude Include="src\core\ModuleManager.h" />
     <ClInclude Include="src\core\MemoryManager.h" />
     <ClInclude Include="src\core\HandleManager.h" />
+    <ClInclude Include="src\core\NetworkManager.h" />
     <ClInclude Include="src\core\Config.h" />
     <ClInclude Include="src\core\HandleWrapper.h" />
     <ClInclude Include="src\security\SecurityManager.h" />
     <ClInclude Include="src\utils\Logger.h" />
     <ClInclude Include="src\utils\ErrorHandler.h" />
+    <ClInclude Include="src\utils\CryptoHelper.h" />
     <ClInclude Include="src\injection\InjectionEngine.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>

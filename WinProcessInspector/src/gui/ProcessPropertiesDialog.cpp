@@ -3,12 +3,15 @@
 #include "../core/ModuleManager.h"
 #include "../core/MemoryManager.h"
 #include "../core/HandleManager.h"
+#include "../core/NetworkManager.h"
 #include "../security/SecurityManager.h"
 #include "../utils/Logger.h"
+#include "../utils/CryptoHelper.h"
 #include "../../resource.h"
 #include <commctrl.h>
 #include <sstream>
 #include <iomanip>
+#include <psapi.h>
 
 using namespace WinProcessInspector::GUI;
 using namespace WinProcessInspector::Core;
@@ -21,6 +24,7 @@ ProcessPropertiesDialog::ProcessPropertiesDialog(HINSTANCE hInstance, HWND hPare
 	, m_hInstance(hInstance)
 	, m_hTabControl(nullptr)
 	, m_hGeneralTab(nullptr)
+	, m_hPerformanceTab(nullptr)
 	, m_hThreadsTab(nullptr)
 	, m_hModulesTab(nullptr)
 	, m_hMemoryTab(nullptr)
@@ -34,10 +38,25 @@ ProcessPropertiesDialog::ProcessPropertiesDialog(HINSTANCE hInstance, HWND hPare
 	, m_hMemoryListView(nullptr)
 	, m_hHandleListView(nullptr)
 	, m_ProcessId(0)
+	, m_hBoldFont(nullptr)
+	, m_hNormalFont(nullptr)
 {
+	m_hNormalFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+		DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+		CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+	
+	m_hBoldFont = CreateFontW(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+		DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+		CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 }
 
 ProcessPropertiesDialog::~ProcessPropertiesDialog() {
+	if (m_hBoldFont) {
+		DeleteObject(m_hBoldFont);
+	}
+	if (m_hNormalFont) {
+		DeleteObject(m_hNormalFont);
+	}
 	if (m_hDlg) {
 		DestroyWindow(m_hDlg);
 	}
@@ -98,7 +117,7 @@ bool ProcessPropertiesDialog::CreateDialogWindow() {
 		L"Process Properties",
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
-		800, 600,
+		900, 700,
 		m_hParent,
 		nullptr,
 		m_hInstance,
@@ -646,6 +665,77 @@ void ProcessPropertiesDialog::RefreshCurrentTab() {
 }
 
 void ProcessPropertiesDialog::RefreshGeneralTab() {
+	if (!m_hGeneralTab) return;
+	
+	HWND hChild = GetWindow(m_hGeneralTab, GW_CHILD);
+	while (hChild) {
+		HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
+		if (GetDlgCtrlID(hChild) != IDC_SEARCH_ONLINE_BUTTON) {
+			DestroyWindow(hChild);
+		}
+		hChild = hNext;
+	}
+	
+	int yPos = 45;
+	int leftCol = 20;
+	int rightCol = 180;
+	int lineHeight = 25;
+	
+	AddStaticText(m_hGeneralTab, L"Process Information", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight + 5;
+	
+	AddStaticText(m_hGeneralTab, L"Name:", leftCol, yPos, 150, 20);
+	std::wstring nameW(m_ProcessInfo.ProcessName.begin(), m_ProcessInfo.ProcessName.end());
+	AddStaticText(m_hGeneralTab, nameW.c_str(), rightCol, yPos, 400, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hGeneralTab, L"Process ID (PID):", leftCol, yPos, 150, 20);
+	std::wstring pidStr = std::to_wstring(m_ProcessInfo.ProcessId);
+	AddStaticText(m_hGeneralTab, pidStr.c_str(), rightCol, yPos, 400, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hGeneralTab, L"Parent PID:", leftCol, yPos, 150, 20);
+	std::wstring ppidStr = std::to_wstring(m_ProcessInfo.ParentProcessId);
+	AddStaticText(m_hGeneralTab, ppidStr.c_str(), rightCol, yPos, 400, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hGeneralTab, L"Session ID:", leftCol, yPos, 150, 20);
+	std::wstring sessionStr = std::to_wstring(m_ProcessInfo.SessionId);
+	AddStaticText(m_hGeneralTab, sessionStr.c_str(), rightCol, yPos, 400, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hGeneralTab, L"Architecture:", leftCol, yPos, 150, 20);
+	std::wstring archW(m_ProcessInfo.Architecture.begin(), m_ProcessInfo.Architecture.end());
+	AddStaticText(m_hGeneralTab, archW.c_str(), rightCol, yPos, 400, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hGeneralTab, L"Creation Time:", leftCol, yPos, 150, 20);
+	std::wstring timeStr = FormatFileTime(m_ProcessInfo.CreationTime);
+	AddStaticText(m_hGeneralTab, timeStr.c_str(), rightCol, yPos, 400, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hGeneralTab, L"User:", leftCol, yPos, 150, 20);
+	std::wstring userStr = m_ProcessInfo.UserDomain + L"\\" + m_ProcessInfo.UserName;
+	if (userStr == L"\\") userStr = L"N/A";
+	AddStaticText(m_hGeneralTab, userStr.c_str(), rightCol, yPos, 400, 20);
+	yPos += lineHeight + 10;
+	
+	AddStaticText(m_hGeneralTab, L"Command Line", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight;
+	
+	std::wstring cmdLine = m_ProcessInfo.CommandLine.empty() ? L"N/A" : m_ProcessInfo.CommandLine;
+	AddEditBox(m_hGeneralTab, cmdLine.c_str(), leftCol, yPos, 720, 80, true, true);
+	yPos += 90;
+	
+	HandleWrapper hProcess = m_ProcessManager.OpenProcess(m_ProcessId, PROCESS_QUERY_INFORMATION);
+	if (hProcess.IsValid()) {
+		WCHAR imagePath[MAX_PATH] = {};
+		if (GetModuleFileNameExW(hProcess.Get(), nullptr, imagePath, MAX_PATH)) {
+			AddStaticText(m_hGeneralTab, L"Image Path", leftCol, yPos, 300, 20, true);
+			yPos += lineHeight;
+			AddEditBox(m_hGeneralTab, imagePath, leftCol, yPos, 720, 60, true, true);
+		}
+	}
 }
 
 void ProcessPropertiesDialog::RefreshThreadsTab() {
@@ -790,6 +880,78 @@ void ProcessPropertiesDialog::RefreshHandlesTab() {
 }
 
 void ProcessPropertiesDialog::RefreshSecurityTab() {
+	if (!m_hSecurityTab) return;
+	
+	HWND hChild = GetWindow(m_hSecurityTab, GW_CHILD);
+	while (hChild) {
+		HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
+		DestroyWindow(hChild);
+		hChild = hNext;
+	}
+	
+	int yPos = 20;
+	int leftCol = 20;
+	int rightCol = 220;
+	int lineHeight = 25;
+	
+	AddStaticText(m_hSecurityTab, L"Integrity & Privileges", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight + 5;
+	
+	AddStaticText(m_hSecurityTab, L"Integrity Level:", leftCol, yPos, 190, 20);
+	std::wstring integrityStr;
+	switch (m_ProcessInfo.IntegrityLevel) {
+		case IntegrityLevel::Untrusted: integrityStr = L"Untrusted"; break;
+		case IntegrityLevel::Low: integrityStr = L"Low"; break;
+		case IntegrityLevel::Medium: integrityStr = L"Medium"; break;
+		case IntegrityLevel::High: integrityStr = L"High"; break;
+		case IntegrityLevel::System: integrityStr = L"System"; break;
+		default: integrityStr = L"Unknown"; break;
+	}
+	AddStaticText(m_hSecurityTab, integrityStr.c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight + 15;
+	
+	AddStaticText(m_hSecurityTab, L"Security Mitigations", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight + 5;
+	
+	AddStaticText(m_hSecurityTab, L"DEP (Data Execution Prevention):", leftCol, yPos, 190, 20);
+	AddStaticText(m_hSecurityTab, m_ProcessInfo.DEPEnabled ? L"✓ Enabled" : L"✗ Disabled", rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hSecurityTab, L"ASLR (Address Randomization):", leftCol, yPos, 190, 20);
+	AddStaticText(m_hSecurityTab, m_ProcessInfo.ASLREnabled ? L"✓ Enabled" : L"✗ Disabled", rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hSecurityTab, L"CFG (Control Flow Guard):", leftCol, yPos, 190, 20);
+	AddStaticText(m_hSecurityTab, m_ProcessInfo.CFGEnabled ? L"✓ Enabled" : L"✗ Disabled", rightCol, yPos, 200, 20);
+	yPos += lineHeight + 15;
+	
+	AddStaticText(m_hSecurityTab, L"Sandboxing & Isolation", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight + 5;
+	
+	AddStaticText(m_hSecurityTab, L"UAC Virtualized:", leftCol, yPos, 190, 20);
+	AddStaticText(m_hSecurityTab, m_ProcessInfo.IsVirtualized ? L"Yes" : L"No", rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hSecurityTab, L"AppContainer (UWP):", leftCol, yPos, 190, 20);
+	AddStaticText(m_hSecurityTab, m_ProcessInfo.IsAppContainer ? L"Yes" : L"No", rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hSecurityTab, L"In Job Object:", leftCol, yPos, 190, 20);
+	AddStaticText(m_hSecurityTab, m_ProcessInfo.IsInJob ? L"Yes" : L"No", rightCol, yPos, 200, 20);
+	yPos += lineHeight + 15;
+	
+	AddStaticText(m_hSecurityTab, L"User Information", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight + 5;
+	
+	AddStaticText(m_hSecurityTab, L"User Name:", leftCol, yPos, 190, 20);
+	std::wstring fullUser = m_ProcessInfo.UserDomain + L"\\" + m_ProcessInfo.UserName;
+	if (fullUser == L"\\") fullUser = L"N/A";
+	AddEditBox(m_hSecurityTab, fullUser.c_str(), rightCol, yPos, 520, 20, false, true);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hSecurityTab, L"User SID:", leftCol, yPos, 190, 20);
+	std::wstring sidStr = m_ProcessInfo.UserSid.empty() ? L"N/A" : m_ProcessInfo.UserSid;
+	AddEditBox(m_hSecurityTab, sidStr.c_str(), rightCol, yPos, 520, 20, false, true);
 }
 
 void ProcessPropertiesDialog::CreateEnvironmentTab() {
@@ -850,12 +1012,218 @@ void ProcessPropertiesDialog::CreateServicesTab() {
 }
 
 void ProcessPropertiesDialog::RefreshPerformanceTab() {
+	if (!m_hPerformanceTab) return;
+	
+	HWND hChild = GetWindow(m_hPerformanceTab, GW_CHILD);
+	while (hChild) {
+		HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
+		DestroyWindow(hChild);
+		hChild = hNext;
+	}
+	
+	int yPos = 20;
+	int leftCol = 20;
+	int rightCol = 200;
+	int lineHeight = 25;
+	
+	AddStaticText(m_hPerformanceTab, L"Resource Usage", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight + 5;
+	
+	AddStaticText(m_hPerformanceTab, L"Thread Count:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, std::to_wstring(m_ProcessInfo.ThreadCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"Handle Count:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, FormatNumber(m_ProcessInfo.HandleCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"GDI Objects:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, std::to_wstring(m_ProcessInfo.GdiObjectCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"USER Objects:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, std::to_wstring(m_ProcessInfo.UserObjectCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"Peak Memory:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, FormatBytes(m_ProcessInfo.PeakWorkingSetSize).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"Page Faults:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, FormatNumber(m_ProcessInfo.PageFaultCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight + 15;
+	
+	AddStaticText(m_hPerformanceTab, L"I/O Statistics", leftCol, yPos, 300, 20, true);
+	yPos += lineHeight + 5;
+	
+	AddStaticText(m_hPerformanceTab, L"Read Operations:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, FormatNumber(m_ProcessInfo.ReadOperationCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"Write Operations:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, FormatNumber(m_ProcessInfo.WriteOperationCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"Bytes Read:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, FormatBytes(m_ProcessInfo.ReadTransferCount).c_str(), rightCol, yPos, 200, 20);
+	yPos += lineHeight;
+	
+	AddStaticText(m_hPerformanceTab, L"Bytes Written:", leftCol, yPos, 170, 20);
+	AddStaticText(m_hPerformanceTab, FormatBytes(m_ProcessInfo.WriteTransferCount).c_str(), rightCol, yPos, 200, 20);
 }
 
 void ProcessPropertiesDialog::RefreshEnvironmentTab() {
+	if (!m_hEnvironmentTab) return;
+	
+	HWND hChild = GetWindow(m_hEnvironmentTab, GW_CHILD);
+	while (hChild) {
+		HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
+		DestroyWindow(hChild);
+		hChild = hNext;
+	}
+	
+	RECT rc;
+	GetClientRect(m_hEnvironmentTab, &rc);
+	
+	AddStaticText(m_hEnvironmentTab, L"File Hashes (Integrity Verification)", 20, 20, 500, 20, true);
+	
+	HandleWrapper hProcess = m_ProcessManager.OpenProcess(m_ProcessId, PROCESS_QUERY_INFORMATION);
+	if (hProcess.IsValid()) {
+		WCHAR imagePath[MAX_PATH] = {};
+		if (GetModuleFileNameExW(hProcess.Get(), nullptr, imagePath, MAX_PATH)) {
+			int yPos = 50;
+			
+			AddStaticText(m_hEnvironmentTab, L"MD5:", 20, yPos, 100, 20);
+			std::wstring md5 = CryptoHelper::CalculateMD5(imagePath);
+			if (md5.empty()) md5 = L"Unable to calculate";
+			AddEditBox(m_hEnvironmentTab, md5.c_str(), 130, yPos, 600, 22, false, true);
+			yPos += 35;
+			
+			AddStaticText(m_hEnvironmentTab, L"SHA-1:", 20, yPos, 100, 20);
+			std::wstring sha1 = CryptoHelper::CalculateSHA1(imagePath);
+			if (sha1.empty()) sha1 = L"Unable to calculate";
+			AddEditBox(m_hEnvironmentTab, sha1.c_str(), 130, yPos, 600, 22, false, true);
+			yPos += 35;
+			
+			AddStaticText(m_hEnvironmentTab, L"SHA-256:", 20, yPos, 100, 20);
+			std::wstring sha256 = CryptoHelper::CalculateSHA256(imagePath);
+			if (sha256.empty()) sha256 = L"Unable to calculate";
+			AddEditBox(m_hEnvironmentTab, sha256.c_str(), 130, yPos, 600, 22, false, true);
+			yPos += 50;
+			
+			AddStaticText(m_hEnvironmentTab, L"Process Attributes", 20, yPos, 300, 20, true);
+			yPos += 30;
+			
+			DWORD fileAttr = GetFileAttributesW(imagePath);
+			std::wstring attrStr;
+			if (fileAttr != INVALID_FILE_ATTRIBUTES) {
+				if (fileAttr & FILE_ATTRIBUTE_READONLY) attrStr += L"Read-Only, ";
+				if (fileAttr & FILE_ATTRIBUTE_HIDDEN) attrStr += L"Hidden, ";
+				if (fileAttr & FILE_ATTRIBUTE_SYSTEM) attrStr += L"System, ";
+				if (fileAttr & FILE_ATTRIBUTE_COMPRESSED) attrStr += L"Compressed, ";
+				if (fileAttr & FILE_ATTRIBUTE_ENCRYPTED) attrStr += L"Encrypted, ";
+				if (!attrStr.empty()) attrStr = attrStr.substr(0, attrStr.length() - 2);
+				else attrStr = L"Normal";
+			} else {
+				attrStr = L"Unable to retrieve";
+			}
+			
+			AddStaticText(m_hEnvironmentTab, L"File Attributes:", 20, yPos, 150, 20);
+			AddEditBox(m_hEnvironmentTab, attrStr.c_str(), 180, yPos, 550, 22, false, true);
+			yPos += 35;
+			
+			WIN32_FILE_ATTRIBUTE_DATA fileData;
+			if (GetFileAttributesExW(imagePath, GetFileExInfoStandard, &fileData)) {
+				AddStaticText(m_hEnvironmentTab, L"File Size:", 20, yPos, 150, 20);
+				ULONGLONG fileSize = (static_cast<ULONGLONG>(fileData.nFileSizeHigh) << 32) | fileData.nFileSizeLow;
+				AddStaticText(m_hEnvironmentTab, FormatBytes(fileSize).c_str(), 180, yPos, 200, 20);
+			}
+		}
+	}
 }
 
 void ProcessPropertiesDialog::RefreshNetworkTab() {
+	if (!m_hNetworkTab) return;
+	
+	HWND hChild = GetWindow(m_hNetworkTab, GW_CHILD);
+	while (hChild) {
+		HWND hNext = GetWindow(hChild, GW_HWNDNEXT);
+		DestroyWindow(hChild);
+		hChild = hNext;
+	}
+	
+	RECT rc;
+	GetClientRect(m_hNetworkTab, &rc);
+	
+	HWND hListView = CreateWindowExW(
+		WS_EX_CLIENTEDGE,
+		WC_LISTVIEWW,
+		L"",
+		WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL,
+		10, 10, rc.right - 20, rc.bottom - 20,
+		m_hNetworkTab,
+		reinterpret_cast<HMENU>(IDC_NETWORK_LIST),
+		m_hInstance,
+		nullptr
+	);
+	
+	if (hListView) {
+		ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+		
+		LVCOLUMNW lvc = {};
+		lvc.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT;
+		lvc.fmt = LVCFMT_LEFT;
+		
+		lvc.pszText = const_cast<LPWSTR>(L"Protocol");
+		lvc.cx = 80;
+		ListView_InsertColumn(hListView, 0, &lvc);
+		
+		lvc.pszText = const_cast<LPWSTR>(L"Local Address");
+		lvc.cx = 150;
+		ListView_InsertColumn(hListView, 1, &lvc);
+		
+		lvc.pszText = const_cast<LPWSTR>(L"Local Port");
+		lvc.cx = 80;
+		ListView_InsertColumn(hListView, 2, &lvc);
+		
+		lvc.pszText = const_cast<LPWSTR>(L"Remote Address");
+		lvc.cx = 150;
+		ListView_InsertColumn(hListView, 3, &lvc);
+		
+		lvc.pszText = const_cast<LPWSTR>(L"Remote Port");
+		lvc.cx = 80;
+		ListView_InsertColumn(hListView, 4, &lvc);
+		
+		lvc.pszText = const_cast<LPWSTR>(L"State");
+		lvc.cx = 120;
+		ListView_InsertColumn(hListView, 5, &lvc);
+		
+		NetworkManager netMgr;
+		auto connections = netMgr.GetConnectionsForProcess(m_ProcessId);
+		
+		for (size_t i = 0; i < connections.size(); ++i) {
+			const auto& conn = connections[i];
+			
+			LVITEMW lvi = {};
+			lvi.mask = LVIF_TEXT;
+			lvi.iItem = static_cast<int>(i);
+			
+			std::wstring protocol = NetworkManager::GetProtocolString(conn.Protocol);
+			lvi.pszText = const_cast<LPWSTR>(protocol.c_str());
+			ListView_InsertItem(hListView, &lvi);
+			
+			ListView_SetItemText(hListView, i, 1, const_cast<LPWSTR>(conn.LocalAddress.c_str()));
+			ListView_SetItemText(hListView, i, 2, const_cast<LPWSTR>(std::to_wstring(conn.LocalPort).c_str()));
+			ListView_SetItemText(hListView, i, 3, const_cast<LPWSTR>(conn.RemoteAddress.c_str()));
+			ListView_SetItemText(hListView, i, 4, const_cast<LPWSTR>(std::to_wstring(conn.RemotePort).c_str()));
+			
+			std::wstring state = NetworkManager::GetStateString(conn.State);
+			ListView_SetItemText(hListView, i, 5, const_cast<LPWSTR>(state.c_str()));
+		}
+		
+		AddStaticText(m_hNetworkTab, (L"Total Connections: " + std::to_wstring(connections.size())).c_str(), 
+			10, rc.bottom - 30, 300, 20);
+	}
 }
 
 void ProcessPropertiesDialog::RefreshServicesTab() {
@@ -881,4 +1249,102 @@ void ProcessPropertiesDialog::OnSearchOnline() {
 	
 	std::wstring query = L"https://www.google.com/search?q=" + encoded + L"+process";
 	ShellExecuteW(nullptr, L"open", query.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+void ProcessPropertiesDialog::AddStaticText(HWND hParent, const wchar_t* text, int x, int y, int width, int height, bool bold) {
+	HWND hStatic = CreateWindowW(
+		L"STATIC",
+		text,
+		WS_VISIBLE | WS_CHILD | SS_LEFT,
+		x, y, width, height,
+		hParent,
+		nullptr,
+		m_hInstance,
+		nullptr
+	);
+	
+	if (hStatic && bold && m_hBoldFont) {
+		SendMessage(hStatic, WM_SETFONT, reinterpret_cast<WPARAM>(m_hBoldFont), TRUE);
+	} else if (hStatic && m_hNormalFont) {
+		SendMessage(hStatic, WM_SETFONT, reinterpret_cast<WPARAM>(m_hNormalFont), TRUE);
+	}
+}
+
+void ProcessPropertiesDialog::AddEditBox(HWND hParent, const wchar_t* text, int x, int y, int width, int height, bool multiline, bool readonly) {
+	DWORD style = WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL;
+	if (multiline) {
+		style |= ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL;
+	}
+	if (readonly) {
+		style |= ES_READONLY;
+	}
+	
+	HWND hEdit = CreateWindowW(
+		L"EDIT",
+		text,
+		style,
+		x, y, width, height,
+		hParent,
+		nullptr,
+		m_hInstance,
+		nullptr
+	);
+	
+	if (hEdit && m_hNormalFont) {
+		SendMessage(hEdit, WM_SETFONT, reinterpret_cast<WPARAM>(m_hNormalFont), TRUE);
+	}
+}
+
+std::wstring ProcessPropertiesDialog::FormatFileTime(const FILETIME& ft) {
+	if (ft.dwLowDateTime == 0 && ft.dwHighDateTime == 0) {
+		return L"N/A";
+	}
+	
+	FILETIME localFt;
+	FileTimeToLocalFileTime(&ft, &localFt);
+	
+	SYSTEMTIME st;
+	FileTimeToSystemTime(&localFt, &st);
+	
+	std::wostringstream oss;
+	oss << std::setfill(L'0')
+		<< st.wYear << L"-"
+		<< std::setw(2) << st.wMonth << L"-"
+		<< std::setw(2) << st.wDay << L" "
+		<< std::setw(2) << st.wHour << L":"
+		<< std::setw(2) << st.wMinute << L":"
+		<< std::setw(2) << st.wSecond;
+	
+	return oss.str();
+}
+
+std::wstring ProcessPropertiesDialog::FormatBytes(ULONGLONG bytes) {
+	const wchar_t* units[] = { L"B", L"KB", L"MB", L"GB", L"TB" };
+	int unitIndex = 0;
+	double size = static_cast<double>(bytes);
+	
+	while (size >= 1024.0 && unitIndex < 4) {
+		size /= 1024.0;
+		unitIndex++;
+	}
+	
+	std::wostringstream oss;
+	oss << std::fixed << std::setprecision(2) << size << L" " << units[unitIndex];
+	return oss.str();
+}
+
+std::wstring ProcessPropertiesDialog::FormatNumber(ULONGLONG number) {
+	std::wstring numStr = std::to_wstring(number);
+	std::wstring result;
+	
+	int count = 0;
+	for (auto it = numStr.rbegin(); it != numStr.rend(); ++it) {
+		if (count > 0 && count % 3 == 0) {
+			result = L',' + result;
+		}
+		result = *it + result;
+		count++;
+	}
+	
+	return result;
 }

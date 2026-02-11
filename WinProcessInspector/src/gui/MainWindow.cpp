@@ -2,6 +2,7 @@
 #include "ProcessPropertiesDialog.h"
 #include "../core/ProcessManager.h"
 #include "../core/SystemInfo.h"
+#include "../core/NetworkManager.h"
 #include "../utils/Logger.h"
 #include "../security/SecurityManager.h"
 #include "../injection/InjectionEngine.h"
@@ -71,7 +72,7 @@ MainWindow::MainWindow(HINSTANCE hInstance)
 	, m_AutoRefresh(false)
 	, m_ToolbarVisible(true)
 	, m_SearchBarVisible(true)
-	, m_TreeViewEnabled(true)
+	, m_TreeViewEnabled(false)
 	, m_RefreshTimerId(0)
 	, m_IsRefreshing(false)
 	, m_LastRefreshTime(0)
@@ -84,16 +85,19 @@ MainWindow::MainWindow(HINSTANCE hInstance)
 {
 	m_ColumnVisible[COL_PPID] = false;
 	m_ColumnVisible[COL_SESSION] = false;
-	m_ColumnVisible[COL_DESCRIPTION] = false;
+	m_ColumnVisible[COL_DESCRIPTION] = true;
 	m_ColumnVisible[COL_IMAGEPATH] = false;
 	m_ColumnVisible[COL_COMMANDLINE] = false;
-	m_ColumnVisible[COL_COMPANY] = false;
+	m_ColumnVisible[COL_COMPANY] = true;
 	
 	MEMORYSTATUSEX memStatus = {};
 	memStatus.dwLength = sizeof(memStatus);
 	if (GlobalMemoryStatusEx(&memStatus)) {
 		m_TotalSystemMemory = memStatus.ullTotalPhys;
 	}
+	
+	Logger::GetInstance().LogInfo("WinProcessInspector initialized with Phase 2 features");
+	Logger::GetInstance().LogInfo("Features: Command-line, Network, I/O, Security mitigations, File hashing");
 }
 
 MainWindow::~MainWindow() {
@@ -371,7 +375,10 @@ bool MainWindow::CreateMenuBar() {
 	AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hViewMenu, MF_STRING | MF_CHECKED, IDM_VIEW_AUTOREFRESH, L"&Auto Refresh");
 	AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_COLUMNS, L"&Columns...");
+	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_NETWORK, L"&Network Connections...");
+	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_SYSTEM_INFO, L"&System Information...");
+	AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
+	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_COLUMNS, L"C&olumns...");
 
 	HMENU hHelpMenu = CreatePopupMenu();
 	if (!hHelpMenu) {
@@ -414,6 +421,7 @@ bool MainWindow::CreateMenuBar() {
 		Logger::GetInstance().LogWarning("Failed to create context menu. Error: " + std::to_string(error));
 	} else {
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_PROPERTIES, L"&Properties");
+		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_VIEW_COMMANDLINE, L"View &Command Line");
 		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_FILELOCATION, L"Open File &Location");
 		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
@@ -692,6 +700,13 @@ bool MainWindow::CreateSearchFilter() {
 	if (!m_hSearchFilter) {
 		return false;
 	}
+	
+	HFONT hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+		DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+		CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+	if (hFont) {
+		SendMessageW(m_hSearchFilter, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+	}
 
 	SendMessage(m_hSearchFilter, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Search..."));
 
@@ -916,6 +931,12 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam) {
 		case IDM_VIEW_COLUMNS:
 			OnViewColumns();
 			break;
+		case IDM_VIEW_NETWORK:
+			ShowNetworkConnectionsWindow();
+			break;
+		case IDM_VIEW_SYSTEM_INFO:
+			ShowSystemInformationWindow();
+			break;
 		case IDM_HELP_ABOUT:
 			OnHelpAbout();
 			break;
@@ -970,6 +991,11 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam) {
 				ResumeProcess(m_SelectedProcessId);
 			}
 			break;
+		case IDM_CONTEXT_VIEW_COMMANDLINE:
+			if (m_SelectedProcessId) {
+				ShowCommandLineDialog(m_SelectedProcessId);
+			}
+			break;
 		case IDM_CONTEXT_SEARCH_ONLINE:
 			if (m_SelectedProcessId) {
 				SearchProcessOnline(m_SelectedProcessId);
@@ -987,6 +1013,8 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam) {
 	if (pnmh->idFrom == IDC_PROCESS_LIST) {
 		if (pnmh->code == NM_CUSTOMDRAW) {
 			return OnCustomDraw(reinterpret_cast<LPNMLVCUSTOMDRAW>(lParam));
+		} else if (pnmh->code == LVN_BEGINLABELEDIT) {
+			return TRUE;
 		} else if (pnmh->code == NM_DBLCLK) {
 			OnProcessListDoubleClick();
 		} else if (pnmh->code == LVN_ITEMCHANGED) {
@@ -1094,7 +1122,7 @@ LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {
 				ShowProcessProperties(m_SelectedProcessId);
 				return 0;
 			}
-			break;
+			return DefWindowProc(m_hWnd, uMsg, wParam, lParam);
 		case WM_USER + 1:
 			{
 				std::vector<ProcessInfo>* processes = reinterpret_cast<std::vector<ProcessInfo>*>(lParam);
@@ -1552,6 +1580,27 @@ void MainWindow::OnProcessListSelectionChanged() {
 		lvi.mask = LVIF_PARAM;
 		ListView_GetItem(m_hProcessListView, &lvi);
 		m_SelectedProcessId = static_cast<DWORD>(lvi.lParam);
+		
+		auto it = std::find_if(m_FilteredProcesses.begin(), m_FilteredProcesses.end(),
+			[this](const ProcessInfo& p) { return p.ProcessId == m_SelectedProcessId; });
+		
+		if (it != m_FilteredProcesses.end() && m_hStatusBar) {
+			std::wostringstream statusText;
+			statusText << L"PID: " << it->ProcessId
+				<< L" | Threads: " << it->ThreadCount
+				<< L" | Handles: " << it->HandleCount
+				<< L" | GDI: " << it->GdiObjectCount
+				<< L" | USER: " << it->UserObjectCount;
+			
+			if (it->DEPEnabled || it->ASLREnabled || it->CFGEnabled) {
+				statusText << L" | Mitigations: ";
+				if (it->DEPEnabled) statusText << L"DEP ";
+				if (it->ASLREnabled) statusText << L"ASLR ";
+				if (it->CFGEnabled) statusText << L"CFG";
+			}
+			
+			SendMessageW(m_hStatusBar, SB_SETTEXT, 0, reinterpret_cast<LPARAM>(statusText.str().c_str()));
+		}
 	} else {
 		m_SelectedProcessId = 0;
 	}
@@ -1935,6 +1984,10 @@ INT_PTR CALLBACK ColumnChooserDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LP
 		MainWindow* pMainWindow = reinterpret_cast<MainWindow*>(lParam);
 		SetWindowLongPtr(hDlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pMainWindow));
 		
+		HFONT hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+			DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+			CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+		
 		struct ColumnCheckbox {
 			int controlId;
 			int columnIndex;
@@ -1961,7 +2014,17 @@ INT_PTR CALLBACK ColumnChooserDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LP
 			HWND hCheckbox = GetDlgItem(hDlg, checkboxes[i].controlId);
 			if (hCheckbox) {
 				SendMessage(hCheckbox, BM_SETCHECK, columnVisible[checkboxes[i].columnIndex] ? BST_CHECKED : BST_UNCHECKED, 0);
+				if (hFont) {
+					SendMessageW(hCheckbox, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+				}
 			}
+		}
+		
+		HWND hOkButton = GetDlgItem(hDlg, IDOK);
+		HWND hCancelButton = GetDlgItem(hDlg, IDCANCEL);
+		if (hFont) {
+			if (hOkButton) SendMessageW(hOkButton, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
+			if (hCancelButton) SendMessageW(hCancelButton, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
 		}
 		
 		return TRUE;
@@ -2066,15 +2129,10 @@ void MainWindow::UpdateProcessMenuState() {
 }
 
 void MainWindow::ShowProcessProperties(DWORD processId) {
-	std::wstring imagePath = GetProcessImagePath(processId);
-	if (!imagePath.empty()) {
-		ShellExecuteW(m_hWnd, L"properties", imagePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-	} else {
-		if (!m_PropertiesDialog) {
-			m_PropertiesDialog = std::make_unique<ProcessPropertiesDialog>(m_hInstance, m_hWnd);
-		}
-		m_PropertiesDialog->Show(processId);
+	if (!m_PropertiesDialog) {
+		m_PropertiesDialog = std::make_unique<ProcessPropertiesDialog>(m_hInstance, m_hWnd);
 	}
+	m_PropertiesDialog->Show(processId);
 }
 
 bool MainWindow::ValidateProcess(DWORD processId, std::wstring& errorMsg) {
@@ -2548,13 +2606,11 @@ static LRESULT CALLBACK InjectionMethodDialogProc(HWND hDlg, UINT uMsg, WPARAM w
 			HWND hList = GetDlgItem(hDlg, IDC_INJECTION_METHOD_LIST);
 			int sel = static_cast<int>(SendMessage(hList, LB_GETCURSEL, 0, 0));
 			const wchar_t* descs[] = {
-				L"Standard Windows API. Most compatible but easily detected by security software.",
-				L"Native API method. More stealthy, bypasses some hooks. Requires ntdll.dll.",
-				L"Low-level NT API. Very stealthy but may fail on protected processes.",
-				L"Uses Asynchronous Procedure Calls. Works on alertable threads only.",
-				L"Hook-based injection. Requires hook procedure in DLL. May be detected."
+				L"Native API method. More stealthy than CreateRemoteThread, bypasses some hooks. Most reliable option.",
+				L"Uses Asynchronous Procedure Calls. Targets first alertable thread. Stealthy but requires alertable state.",
+				L"Hook-based injection. Requires DLL to export 'HookProcedure'. May be detected by anti-cheat."
 			};
-			if (sel >= 0 && sel < 5 && g_InjectionDialogData.hDesc) {
+			if (sel >= 0 && sel < 3 && g_InjectionDialogData.hDesc) {
 				SetWindowTextW(g_InjectionDialogData.hDesc, descs[sel]);
 			}
 		}
@@ -2648,17 +2704,15 @@ int MainWindow::SelectInjectionMethod(DWORD processId) {
 		SendMessage(hCancel, WM_SETFONT, reinterpret_cast<WPARAM>(hFont), TRUE);
 	}
 
-	for (int i = 0; i < 5; ++i) {
+	for (int i = 0; i < 3; ++i) {
 		SendMessage(hList, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(methods[i]));
 	}
 	SendMessage(hList, LB_SETCURSEL, 0, 0);
 
 	const wchar_t* descs[] = {
-		L"Standard Windows API. Most compatible but easily detected by security software.",
-		L"Native API method. More stealthy, bypasses some hooks. Requires ntdll.dll.",
-		L"Low-level NT API. Very stealthy but may fail on protected processes.",
-		L"Uses Asynchronous Procedure Calls. Works on alertable threads only.",
-		L"Hook-based injection. Requires hook procedure in DLL. May be detected."
+		L"Native API method. More stealthy than CreateRemoteThread, bypasses some hooks. Most reliable option.",
+		L"Uses Asynchronous Procedure Calls. Targets first alertable thread. Stealthy but requires alertable state.",
+		L"Hook-based injection. Requires DLL to export 'HookProcedure'. May be detected by anti-cheat."
 	};
 	SetWindowTextW(hDesc, descs[0]);
 
@@ -2707,6 +2761,114 @@ void MainWindow::SearchProcessOnline(DWORD processId) {
 	
 	std::wstring query = L"https://www.google.com/search?q=" + encoded + L"+process";
 	ShellExecuteW(nullptr, L"open", query.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+void MainWindow::ShowCommandLineDialog(DWORD processId) {
+	ProcessInfo info = m_ProcessManager.GetProcessDetails(processId);
+	if (info.ProcessId == 0) {
+		MessageBoxW(m_hWnd, L"The process no longer exists.", L"Command Line", MB_OK | MB_ICONERROR);
+		return;
+	}
+
+	std::wstring message;
+	message += L"Process: ";
+	message += std::wstring(info.ProcessName.begin(), info.ProcessName.end());
+	message += L"\nPID: ";
+	message += std::to_wstring(info.ProcessId);
+	message += L"\n\nCommand Line:\n";
+	
+	if (info.CommandLine.empty()) {
+		message += L"(Not available)";
+	} else {
+		message += info.CommandLine;
+	}
+	
+	MessageBoxW(m_hWnd, message.c_str(), L"Process Command Line", MB_OK | MB_ICONINFORMATION);
+}
+
+void MainWindow::ShowNetworkConnectionsWindow() {
+	NetworkManager netMgr;
+	auto allConnections = netMgr.EnumerateConnections();
+	
+	if (allConnections.empty()) {
+		MessageBoxW(m_hWnd, L"No active network connections found.", L"Network Connections", MB_OK | MB_ICONINFORMATION);
+		return;
+	}
+	
+	std::wstring message = L"System Network Connections\n\n";
+	message += L"Total: " + std::to_wstring(allConnections.size()) + L" active connections\n\n";
+	message += L"Top 30 connections:\n";
+	message += L"─────────────────────────────────────────────────\n\n";
+	
+	int count = 0;
+	for (const auto& conn : allConnections) {
+		if (count >= 30) {
+			message += L"\n... and " + std::to_wstring(allConnections.size() - 30) + L" more.\n\n";
+			message += L"Tip: For per-process connections:\n";
+			message += L"Right-click process → Properties → Network tab";
+			break;
+		}
+		
+		message += NetworkManager::GetProtocolString(conn.Protocol) + L" | ";
+		message += conn.LocalAddress + L":" + std::to_wstring(conn.LocalPort) + L" → ";
+		message += conn.RemoteAddress + L":" + std::to_wstring(conn.RemotePort) + L"\n";
+		message += L"    State: " + NetworkManager::GetStateString(conn.State);
+		message += L" | PID: " + std::to_wstring(conn.ProcessId) + L"\n\n";
+		count++;
+	}
+	
+	MessageBoxW(m_hWnd, message.c_str(), L"Network Connections", MB_OK | MB_ICONINFORMATION);
+}
+
+void MainWindow::ShowSystemInformationWindow() {
+	std::wstring message = L"System Information\n";
+	message += L"================================\n\n";
+	
+	MEMORYSTATUSEX memStatus = {};
+	memStatus.dwLength = sizeof(memStatus);
+	if (GlobalMemoryStatusEx(&memStatus)) {
+		message += L"Physical Memory:\n";
+		message += L"  Total: " + std::to_wstring(memStatus.ullTotalPhys / 1024 / 1024) + L" MB\n";
+		message += L"  Available: " + std::to_wstring(memStatus.ullAvailPhys / 1024 / 1024) + L" MB\n";
+		message += L"  Used: " + std::to_wstring((memStatus.ullTotalPhys - memStatus.ullAvailPhys) / 1024 / 1024) + L" MB\n";
+		message += L"  Load: " + std::to_wstring(memStatus.dwMemoryLoad) + L"%\n\n";
+	}
+	
+	SYSTEM_INFO sysInfo = {};
+	GetSystemInfo(&sysInfo);
+	message += L"Processor:\n";
+	message += L"  Count: " + std::to_wstring(sysInfo.dwNumberOfProcessors) + L" logical processors\n";
+	message += L"  Architecture: ";
+	switch (sysInfo.wProcessorArchitecture) {
+		case PROCESSOR_ARCHITECTURE_AMD64: message += L"x64 (AMD64)\n"; break;
+		case PROCESSOR_ARCHITECTURE_ARM: message += L"ARM\n"; break;
+		case PROCESSOR_ARCHITECTURE_ARM64: message += L"ARM64\n"; break;
+		case PROCESSOR_ARCHITECTURE_INTEL: message += L"x86 (Intel)\n"; break;
+		default: message += L"Unknown\n"; break;
+	}
+	message += L"\n";
+	
+	auto processes = m_ProcessManager.EnumerateAllProcesses();
+	DWORD totalThreads = 0;
+	DWORD totalHandles = 0;
+	SIZE_T totalMemory = 0;
+	
+	for (const auto& proc : processes) {
+		totalThreads += proc.ThreadCount;
+		totalHandles += proc.HandleCount;
+		auto memIt = m_ProcessMemory.find(proc.ProcessId);
+		if (memIt != m_ProcessMemory.end()) {
+			totalMemory += memIt->second;
+		}
+	}
+	
+	message += L"Process Summary:\n";
+	message += L"  Total Processes: " + std::to_wstring(processes.size()) + L"\n";
+	message += L"  Total Threads: " + std::to_wstring(totalThreads) + L"\n";
+	message += L"  Total Handles: " + std::to_wstring(totalHandles) + L"\n";
+	message += L"  Total Memory: " + std::to_wstring(totalMemory / 1024 / 1024) + L" MB\n";
+	
+	MessageBoxW(m_hWnd, message.c_str(), L"System Information", MB_OK | MB_ICONINFORMATION);
 }
 
 void MainWindow::GroupSvchostServices(std::unordered_map<DWORD, std::vector<DWORD>>& processChildren) {
@@ -2845,28 +3007,6 @@ LRESULT MainWindow::OnCustomDraw(LPNMLVCUSTOMDRAW lplvcd) {
 		
 		case CDDS_SUBITEM | CDDS_ITEMPREPAINT:
 		{
-			LVITEMW lvi = {};
-			lvi.iItem = static_cast<int>(lplvcd->nmcd.dwItemSpec);
-			lvi.mask = LVIF_PARAM;
-			ListView_GetItem(m_hProcessListView, &lvi);
-			DWORD processId = static_cast<DWORD>(lvi.lParam);
-			
-			if (lplvcd->iSubItem == COL_CPU) {
-				double cpuUsage = GetCpuUsage(processId);
-				if (cpuUsage > 0.1) {
-					RECT rect = lplvcd->nmcd.rc;
-					DrawCpuBar(lplvcd->nmcd.hdc, rect, cpuUsage);
-					return CDRF_SKIPDEFAULT;
-				}
-			} else if (lplvcd->iSubItem == COL_MEMORY) {
-				auto it = m_ProcessMemory.find(processId);
-				if (it != m_ProcessMemory.end() && it->second > 0) {
-					RECT rect = lplvcd->nmcd.rc;
-					DrawMemoryBar(lplvcd->nmcd.hdc, rect, it->second, m_TotalSystemMemory);
-					return CDRF_SKIPDEFAULT;
-				}
-			}
-			
 			return CDRF_DODEFAULT;
 		}
 	}

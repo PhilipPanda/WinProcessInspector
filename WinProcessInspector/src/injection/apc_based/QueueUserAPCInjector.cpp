@@ -14,15 +14,17 @@ bool InjectViaQueueUserAPC(LPCSTR DllPath, HANDLE hProcess, DWORD processId) {
 		return false;
 	}
 
-	LPVOID pDllPath = VirtualAllocEx(hProcess, 0, strlen(DllPath), MEM_COMMIT, PAGE_READWRITE);
+	SIZE_T dllPathSize = strlen(DllPath) + 1;
+	LPVOID pDllPath = VirtualAllocEx(hProcess, 0, dllPathSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
 	if (!pDllPath) {
 		return false;
 	}
 
-	BOOL Written = WriteProcessMemory(hProcess, pDllPath, LPVOID(DllPath), strlen(DllPath), NULL);
+	SIZE_T bytesWritten = 0;
+	BOOL Written = WriteProcessMemory(hProcess, pDllPath, LPVOID(DllPath), dllPathSize, &bytesWritten);
 
-	if (!Written) {
+	if (!Written || bytesWritten != dllPathSize) {
 		VirtualFreeEx(hProcess, pDllPath, 0, MEM_RELEASE);
 		return false;
 	}
@@ -67,11 +69,19 @@ bool InjectViaQueueUserAPC(LPCSTR DllPath, HANDLE hProcess, DWORD processId) {
 	}
 
 	DWORD dwResult = QueueUserAPC((PAPCFUNC)LoadLibAddr, hThread, (ULONG_PTR)pDllPath);
+	
 	CloseHandle(hThread);
 	CloseHandle(hThreadSnap);
+	
+	if (dwResult == 0) {
+		VirtualFreeEx(hProcess, pDllPath, 0, MEM_RELEASE);
+		return false;
+	}
+	
+	Sleep(100);
 	VirtualFreeEx(hProcess, pDllPath, 0, MEM_RELEASE);
-
-	return dwResult != 0;
+	
+	return true;
 }
 
 }
