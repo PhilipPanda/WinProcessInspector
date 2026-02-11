@@ -1,3 +1,4 @@
+// NT API includes - must define WIN32_NO_STATUS before windows.h
 #define WIN32_NO_STATUS
 #include <Windows.h>
 #undef WIN32_NO_STATUS
@@ -15,6 +16,7 @@
 #pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "advapi32.lib")
 
+// NT API declarations
 typedef NTSTATUS (WINAPI* pNtQueryInformationThread)(
 	HANDLE ThreadHandle,
 	ULONG ThreadInformationClass,
@@ -42,6 +44,7 @@ std::vector<ProcessInfo> ProcessManager::EnumerateAllProcesses() const {
 	PROCESSENTRY32W pe32 = {};
 	pe32.dwSize = sizeof(PROCESSENTRY32W);
 
+	// Use RAII wrapper for snapshot handle
 	HandleWrapper hSnap(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
 	if (!hSnap.IsValid() || hSnap.Get() == INVALID_HANDLE_VALUE) {
 		return processes;
@@ -53,19 +56,26 @@ std::vector<ProcessInfo> ProcessManager::EnumerateAllProcesses() const {
 			info.ProcessId = pe32.th32ProcessID;
 			info.ParentProcessId = pe32.th32ParentProcessID;
 
+			// Convert process name from wide to UTF-8
 			int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, pe32.szExeFile, -1, nullptr, 0, nullptr, nullptr);
 			if (sizeNeeded > 0) {
 				std::string processName(sizeNeeded, 0);
 				WideCharToMultiByte(CP_UTF8, 0, pe32.szExeFile, -1, &processName[0], sizeNeeded, nullptr, nullptr);
-				processName.pop_back();
+				processName.pop_back(); // Remove null terminator
 				info.ProcessName = processName;
 			}
 
-
+			// Get architecture using RAII
 			info.Architecture = GetProcessArchitecture(pe32.th32ProcessID);
+
+			// Get session ID
 			info.SessionId = GetProcessSessionId(pe32.th32ProcessID);
+
+			// Get integrity level (may fail for protected processes)
 			Security::SecurityManager secMgr;
 			info.IntegrityLevel = secMgr.GetProcessIntegrityLevel(pe32.th32ProcessID);
+
+			// Get user information (may fail for protected processes)
 			GetProcessUser(pe32.th32ProcessID, info.UserSid, info.UserName, info.UserDomain);
 
 			processes.push_back(info);
@@ -81,9 +91,10 @@ ProcessInfo ProcessManager::GetProcessDetails(DWORD processId) const {
 
 	HandleWrapper hProcess = OpenProcess(processId, PROCESS_QUERY_INFORMATION | PROCESS_VM_READ);
 	if (!hProcess.IsValid()) {
-		return info;
+		return info; // Return empty ProcessId to indicate failure
 	}
 
+	// Get process name
 	WCHAR processName[MAX_PATH] = {};
 	DWORD processNameLen = MAX_PATH;
 	if (QueryFullProcessImageNameW(hProcess.Get(), 0, processName, &processNameLen)) {
@@ -96,8 +107,10 @@ ProcessInfo ProcessManager::GetProcessDetails(DWORD processId) const {
 		}
 	}
 
+	// Get architecture
 	info.Architecture = GetArchitectureFromHandle(hProcess.Get());
 
+	// Get parent PID using Toolhelp32Snapshot
 	PROCESSENTRY32W pe32 = {};
 	pe32.dwSize = sizeof(PROCESSENTRY32W);
 	HandleWrapper hSnap(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
@@ -110,9 +123,14 @@ ProcessInfo ProcessManager::GetProcessDetails(DWORD processId) const {
 		} while (Process32NextW(hSnap.Get(), &pe32));
 	}
 
+	// Get session ID
 	info.SessionId = GetProcessSessionId(processId);
+
+	// Get integrity level
 	Security::SecurityManager secMgr;
 	info.IntegrityLevel = secMgr.GetProcessIntegrityLevel(processId);
+
+	// Get user information
 	GetProcessUser(processId, info.UserSid, info.UserName, info.UserDomain);
 
 	return info;
@@ -127,6 +145,7 @@ DWORD ProcessManager::FindProcessByName(const char* processName) const {
 		return 0;
 	}
 
+	// Convert process name to wide string
 	int wlen = MultiByteToWideChar(CP_UTF8, 0, processName, -1, nullptr, 0);
 	if (wlen <= 0) {
 		return 0;
@@ -166,14 +185,20 @@ std::vector<ThreadInfo> ProcessManager::EnumerateThreads(DWORD processId) const 
 				info.ThreadId = te32.th32ThreadID;
 				info.ProcessId = te32.th32OwnerProcessID;
 
+				// Open thread to get detailed information
 				HandleWrapper hThread(OpenThread(THREAD_QUERY_INFORMATION | THREAD_GET_CONTEXT, FALSE, info.ThreadId));
 				if (hThread.IsValid()) {
+					// Get start address
 					info.StartAddress = GetThreadStartAddress(hThread.Get());
+
+					// Get state and wait reason
 					DWORD state = 0, waitReason = 0;
 					if (GetThreadState(hThread.Get(), state, waitReason)) {
 						info.State = state;
 						info.WaitReason = waitReason;
 					}
+
+					// Get priority
 					info.Priority = GetThreadPriority(hThread.Get());
 				}
 
@@ -218,6 +243,7 @@ bool ProcessManager::GetProcessUser(DWORD processId, std::wstring& userSid, std:
 		return false;
 	}
 
+	// Get token user
 	DWORD length = 0;
 	GetTokenInformation(hToken, TokenUser, nullptr, 0, &length);
 	if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
@@ -232,12 +258,14 @@ bool ProcessManager::GetProcessUser(DWORD processId, std::wstring& userSid, std:
 		return false;
 	}
 
+	// Convert SID to string
 	LPWSTR sidString = nullptr;
 	if (ConvertSidToStringSidW(ptu->User.Sid, &sidString)) {
 		userSid = sidString;
 		LocalFree(sidString);
 	}
 
+	// Lookup account name
 	WCHAR name[256] = {};
 	WCHAR domain[256] = {};
 	DWORD nameLen = sizeof(name) / sizeof(name[0]);
@@ -269,6 +297,7 @@ std::string ProcessManager::GetArchitectureFromHandle(HANDLE hProcess) const {
 			}
 		}
 	} else {
+		// Fallback: check native system architecture
 		SYSTEM_INFO si;
 		GetNativeSystemInfo(&si);
 		if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ||
@@ -310,9 +339,11 @@ ULONG_PTR ProcessManager::GetThreadStartAddress(HANDLE hThread) const {
 }
 
 bool ProcessManager::GetThreadState(HANDLE hThread, DWORD& state, DWORD& waitReason) const {
+	// Check suspend count to determine if thread is running or suspended
 	DWORD suspendCount = SuspendThread(hThread);
 	if (suspendCount != (DWORD)-1) {
 		if (suspendCount > 0) {
+			// Thread was suspended, resume it
 			ResumeThread(hThread);
 			state = 5; // THREAD_STATE_WAITING (suspended)
 		} else {
@@ -325,5 +356,5 @@ bool ProcessManager::GetThreadState(HANDLE hThread, DWORD& state, DWORD& waitRea
 	return false;
 }
 
-}
-} 
+} // namespace Core
+} // namespace WinProcessInspector
