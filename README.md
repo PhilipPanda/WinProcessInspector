@@ -76,3 +76,9 @@ WinProcessInspector is built with a clean, layered architecture:
 <p align="center">
   <img src="github/images/showcase.png" alt="WinProcessInspector Showcase">
 </p>
+
+---
+
+<p align="center">
+  Built by <a href="https://templeenterprise.com"><b>Temple Enterprise LLC</b></a>
+</p>
