@@ -15,8 +15,8 @@
 #endif
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     0,1,5,0
-PRODUCTVERSION 0,1,5,0
+FILEVERSION     0,2,0,0
+PRODUCTVERSION 0,2,0,0
 FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
 FILEFLAGS      0x0L
 FILEOS         0x40004L
@@ -27,14 +27,14 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName",      "WinProcessInspector"
+            VALUE "CompanyName",      "Temple Enterprise LLC"
             VALUE "FileDescription",   "WinProcessInspector - Windows Process Inspection Tool"
-            VALUE "FileVersion",       "0.1.5.0"
+            VALUE "FileVersion",       "0.2.0.0"
             VALUE "InternalName",      "WinProcessInspector"
-            VALUE "LegalCopyright",    ""
+            VALUE "LegalCopyright",    "\251 2025-2026 Temple Enterprise LLC"
             VALUE "OriginalFilename", "WinProcessInspector.exe"
             VALUE "ProductName",       "WinProcessInspector"
-            VALUE "ProductVersion",    "0.1.5.0"
+            VALUE "ProductVersion",    "0.2.0.0"
         END
     END
     BLOCK "VarFileInfo"

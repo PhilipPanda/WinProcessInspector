@@ -339,9 +339,9 @@ bool MainWindow::CreateMenuBar() {
 	}
 	AppendMenuW(hFileMenu, MF_STRING, IDM_FILE_REFRESH, L"&Refresh\tF5");
 	AppendMenuW(hFileMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(hFileMenu, MF_STRING, IDM_FILE_EXPORT, L"&Export Process List (CSV)...");
+	AppendMenuW(hFileMenu, MF_STRING, IDM_FILE_EXPORT, L"&Export Process List...\tCtrl+E");
 	AppendMenuW(hFileMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(hFileMenu, MF_STRING, IDM_FILE_EXIT, L"E&xit");
+	AppendMenuW(hFileMenu, MF_STRING, IDM_FILE_EXIT, L"E&xit\tAlt+F4");
 
 	HMENU hProcessMenu = CreatePopupMenu();
 	if (!hProcessMenu) {
@@ -352,20 +352,19 @@ bool MainWindow::CreateMenuBar() {
 		Logger::GetInstance().LogWarning("Failed to create Process menu. Error: " + std::to_string(error));
 		return false;
 	}
-	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_PROPERTIES, L"&Properties");
+	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_PROPERTIES, L"&Properties\tEnter");
 	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_FILE_LOCATION, L"Open File &Location");
 	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_SEARCH_ONLINE, L"Search &Online");
 	AppendMenuW(hProcessMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_INJECT_DLL, L"Inject &DLL...");
+	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_DUMP, L"Create D&ump...");
 	AppendMenuW(hProcessMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_SET_PRIORITY, L"Set &Priority...");
+	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_SET_PRIORITY, L"Set P&riority...");
 	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_SET_AFFINITY, L"Set &Affinity...");
 	AppendMenuW(hProcessMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_SUSPEND, L"&Suspend");
 	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_RESUME, L"&Resume");
-	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_TERMINATE, L"&Terminate");
-	AppendMenuW(hProcessMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_DUMP, L"Create &Dump...");
+	AppendMenuW(hProcessMenu, MF_STRING | MF_GRAYED, IDM_PROCESS_TERMINATE, L"&Terminate\tDel");
 
 	HMENU hViewMenu = CreatePopupMenu();
 	if (!hViewMenu) {
@@ -377,15 +376,24 @@ bool MainWindow::CreateMenuBar() {
 		return false;
 	}
 	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_TREEVIEW, L"&Tree View");
-	AppendMenuW(hViewMenu, MF_STRING | MF_CHECKED, IDM_VIEW_TOOLBAR, L"&Toolbar");
-	AppendMenuW(hViewMenu, MF_STRING | MF_CHECKED, IDM_VIEW_SEARCHBAR, L"&Search Bar");
+	AppendMenuW(hViewMenu, MF_STRING | MF_CHECKED, IDM_VIEW_TOOLBAR, L"Tool&bar");
+	AppendMenuW(hViewMenu, MF_STRING | MF_CHECKED, IDM_VIEW_SEARCHBAR, L"&Search Bar\tCtrl+F");
 	AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_AUTOREFRESH, L"&Auto Refresh");
 	AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_NETWORK, L"&Network Connections...");
-	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_SYSTEM_INFO, L"&System Information...");
-	AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hViewMenu, MF_STRING, IDM_VIEW_COLUMNS, L"C&olumns...");
+
+	HMENU hToolsMenu = CreatePopupMenu();
+	if (!hToolsMenu) {
+		DWORD error = GetLastError();
+		std::wostringstream oss;
+		oss << L"Failed to create Tools menu. Error: " << error;
+		MessageBoxW(m_hWnd, oss.str().c_str(), L"Initialization Warning", MB_OK | MB_ICONWARNING);
+		Logger::GetInstance().LogWarning("Failed to create Tools menu. Error: " + std::to_string(error));
+		return false;
+	}
+	AppendMenuW(hToolsMenu, MF_STRING, IDM_TOOLS_NETWORK, L"&Network Connections...");
+	AppendMenuW(hToolsMenu, MF_STRING, IDM_TOOLS_SYSTEM_INFO, L"&System Information...");
 
 	HMENU hHelpMenu = CreatePopupMenu();
 	if (!hHelpMenu) {
@@ -399,10 +407,12 @@ bool MainWindow::CreateMenuBar() {
 	AppendMenuW(hHelpMenu, MF_STRING, IDM_HELP_ABOUT, L"&About WinProcessInspector");
 	AppendMenuW(hHelpMenu, MF_SEPARATOR, 0, nullptr);
 	AppendMenuW(hHelpMenu, MF_STRING, IDM_HELP_GITHUB, L"&GitHub Repository");
+	AppendMenuW(hHelpMenu, MF_STRING, IDM_HELP_WEBSITE, L"Visit &Website");
 
 	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hFileMenu), L"&File");
 	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hProcessMenu), L"&Process");
 	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hViewMenu), L"&View");
+	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hToolsMenu), L"&Tools");
 	AppendMenuW(m_hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hHelpMenu), L"&Help");
 
 	if (m_hWnd && IsWindow(m_hWnd)) {
@@ -427,21 +437,19 @@ bool MainWindow::CreateMenuBar() {
 		MessageBoxW(m_hWnd, oss.str().c_str(), L"Initialization Warning", MB_OK | MB_ICONWARNING);
 		Logger::GetInstance().LogWarning("Failed to create context menu. Error: " + std::to_string(error));
 	} else {
-		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_PROPERTIES, L"&Properties");
+		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_PROPERTIES, L"&Properties\tEnter");
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_VIEW_COMMANDLINE, L"View &Command Line");
-		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_FILELOCATION, L"Open File &Location");
+		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_SEARCH_ONLINE, L"Search &Online");
+		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
+		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_COPY_PID, L"Copy &PID");
+		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_COPY_NAME, L"Copy &Name");
 		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_INJECT_DLL, L"Inject &DLL...");
 		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_SUSPEND, L"&Suspend Process");
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_RESUME, L"&Resume Process");
 		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_TERMINATE, L"&Terminate Process");
-		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
-		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_COPY_PID, L"Copy &PID");
-		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_COPY_NAME, L"Copy &Name");
-		AppendMenuW(m_hContextMenu, MF_SEPARATOR, 0, nullptr);
-		AppendMenuW(m_hContextMenu, MF_STRING, IDM_CONTEXT_SEARCH_ONLINE, L"Search &Online");
 	}
 
 	return true;
@@ -591,6 +599,21 @@ bool MainWindow::CreateStatusBar() {
 		Logger::GetInstance().LogWarning("Failed to create status bar. Error: " + std::to_string(error));
 		return false;
 	}
+
+	RECT rc;
+	GetClientRect(m_hWnd, &rc);
+	int totalWidth = rc.right;
+	int centerWidth = 340;
+	int rightWidth = 100;
+	int leftWidth = totalWidth - centerWidth - rightWidth;
+	if (leftWidth < 100) leftWidth = 100;
+	int parts[3] = { leftWidth, leftWidth + centerWidth, -1 };
+	SendMessageW(m_hStatusBar, SB_SETPARTS, 3, reinterpret_cast<LPARAM>(parts));
+
+	SendMessageW(m_hStatusBar, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(L"Ready"));
+	SendMessageW(m_hStatusBar, SB_SETTEXTW, 1 | SBT_OWNERDRAW, 0);
+	SendMessageW(m_hStatusBar, SB_SETTEXTW, 1, reinterpret_cast<LPARAM>(L"Built by Temple Enterprise LLC \u00B7 templeenterprise.com"));
+	SendMessageW(m_hStatusBar, SB_SETTEXTW, 2, reinterpret_cast<LPARAM>(L"v0.2.0"));
 
 	return true;
 }
@@ -830,6 +853,14 @@ LRESULT MainWindow::OnSize() {
 	if (m_hStatusBar && IsWindow(m_hStatusBar)) {
 		SendMessage(m_hStatusBar, WM_SIZE, 0, 0);
 		
+		int totalWidth = rc.right - rc.left;
+		int centerWidth = 340;
+		int rightWidth = 100;
+		int leftWidth = totalWidth - centerWidth - rightWidth;
+		if (leftWidth < 100) leftWidth = 100;
+		int parts[3] = { leftWidth, leftWidth + centerWidth, -1 };
+		SendMessageW(m_hStatusBar, SB_SETPARTS, 3, reinterpret_cast<LPARAM>(parts));
+		
 		RECT rcStatus;
 		if (GetClientRect(m_hStatusBar, &rcStatus)) {
 			statusBarHeight = rcStatus.bottom - rcStatus.top;
@@ -960,9 +991,11 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam) {
 			OnViewColumns();
 			break;
 		case IDM_VIEW_NETWORK:
+		case IDM_TOOLS_NETWORK:
 			ShowNetworkConnectionsWindow();
 			break;
 		case IDM_VIEW_SYSTEM_INFO:
+		case IDM_TOOLS_SYSTEM_INFO:
 			ShowSystemInformationWindow();
 			break;
 		case IDM_HELP_ABOUT:
@@ -971,6 +1004,14 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam) {
 		case IDM_HELP_GITHUB:
 			OnHelpGitHub();
 			break;
+		case IDM_HELP_WEBSITE:
+		{
+			HINSTANCE result = ShellExecuteW(m_hWnd, L"open", L"https://templeenterprise.com", nullptr, nullptr, SW_SHOWNORMAL);
+			if (reinterpret_cast<INT_PTR>(result) <= 32) {
+				MessageBoxW(m_hWnd, L"Failed to open website.", L"Error", MB_OK | MB_ICONERROR);
+			}
+			break;
+		}
 		case IDC_SEARCH_FILTER:
 			if (HIWORD(wParam) == EN_CHANGE) {
 				wchar_t buffer[256] = {};
@@ -2145,7 +2186,14 @@ void MainWindow::UpdateColumnVisibility() {
 }
 
 void MainWindow::OnHelpAbout() {
-	MessageBoxW(m_hWnd, L"WinProcessInspector\n\nA professional Windows system inspection tool.", L"About WinProcessInspector", MB_OK | MB_ICONINFORMATION);
+	std::wstring aboutText =
+		L"WinProcessInspector v0.2.0\n\n"
+		L"A professional Windows system inspection tool for\n"
+		L"inspecting, monitoring, and analyzing live processes,\n"
+		L"threads, memory, handles, and system resources.\n\n"
+		L"\u00A9 2025\u20132026 Temple Enterprise LLC\n"
+		L"https://templeenterprise.com";
+	MessageBoxW(m_hWnd, aboutText.c_str(), L"About WinProcessInspector", MB_OK | MB_ICONINFORMATION);
 }
 
 void MainWindow::OnHelpGitHub() {
