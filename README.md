@@ -63,32 +63,6 @@
 
 ---
 
-## 🏗️ Architecture
-
-WinProcessInspector is built with a clean, modular, layered architecture:
-
-| Layer | Description |
-|---|---|
-| **Core / Engine** | Windows API interaction — process, thread, module, memory, handle, and network enumeration |
-| **Security** | Token, privilege, integrity level, and access-rights handling |
-| **Injection** | DLL injection engine with multiple injection method support |
-| **GUI** | Native Win32 presentation layer with ListView, toolbar, status bar, and dialogs |
-| **Utilities** | Logging, error handling, and helper functions |
-
-```
-WinProcessInspector/
-├── src/
-│   ├── core/          # Process, Module, Memory, Handle, Network managers
-│   ├── gui/           # MainWindow, ProcessPropertiesDialog
-│   ├── injection/     # DLL injection engine
-│   ├── security/      # Security and token management
-│   └── utils/         # Logger and helper utilities
-├── resources/         # Icons and application resources
-└── WinProcessModule/  # Companion kernel-mode module (optional)
-```
-
----
-
 ## 📋 Requirements
 
 - **OS**: Windows 10 / 11 (x64)
