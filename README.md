@@ -16,50 +16,37 @@
 
 ---
 
-## 📋 Table of Contents
-
-- [Features](#-features)
-- [Screenshot](#-screenshot)
-- [Architecture](#-architecture)
-- [Requirements](#-requirements)
-- [Build & Launch](#-build--launch)
-- [Keyboard Shortcuts](#-keyboard-shortcuts)
-- [Contributing](#-contributing)
-- [License](#-license)
-
----
-
 ## ✨ Features
 
-### 🔍 Process & Thread Inspection
+### Process & Thread Inspection
 - Full process enumeration — PID, PPID, session, integrity level, architecture
 - Thread enumeration per process with start addresses, states, and priorities
 - Tree-view hierarchy showing parent–child process relationships
 - Real-time process search and filtering
 
-### 🧠 Memory & Handle Analysis
+### Memory & Handle Analysis
 - Virtual memory region enumeration with protection and usage details
 - Handle enumeration — files, registry keys, mutexes, events, sections
 - Per-process memory usage tracking with visual bar indicators
 
-### 📦 Module Inspection
+### Module Inspection
 - Loaded DLL/module enumeration with base address, size, and file path
 - Digital signature verification for detecting unsigned modules
 - File description and company name extraction
 
-### 🔐 Security Analysis
+### Security Analysis
 - Access token inspection with privileges and group SIDs
 - Integrity level visualization (System, High, Medium, Low, Untrusted)
 - Process architecture detection (x86 vs x64)
 
-### 📊 System Monitoring
+### System Monitoring
 - Per-process CPU usage with color-coded bar indicators
 - Real-time memory usage tracking against total system memory
 - Global system metrics and information dashboard
 - Network connection monitoring
 - Auto-refresh mode for continuous monitoring
 
-### ⚙️ Process Management
+### Process Management
 - Suspend, resume, and terminate processes
 - DLL injection with multiple injection methods
 - Process priority and CPU affinity configuration
@@ -68,7 +55,7 @@
 
 ---
 
-## 📸 Screenshot
+## 📸 Showcase
 
 <p align="center">
   <img src="github/images/showcase.png" alt="WinProcessInspector Showcase">
@@ -160,16 +147,6 @@ Please ensure your code follows the existing style and builds without warnings.
 
 ---
 
-## 📄 License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
-
 <p align="center">
   Built by <a href="https://templeenterprise.com"><b>Temple Enterprise LLC</b></a>
-</p>
-
-<p align="center">
-  <a href="https://templeenterprise.com">templeenterprise.com</a>
 </p>
